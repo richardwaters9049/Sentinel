@@ -25,23 +25,30 @@ type EventReader interface {
 	ListEvents(context.Context, database.EventQuery) ([]telemetry.Event, error)
 }
 
+type FindingReader interface {
+	ListFindings(context.Context, database.FindingQuery) ([]database.FindingRecord, error)
+}
+
 type Server struct {
 	mux       *http.ServeMux
 	readiness *readiness.Checker
 	ingestor  TelemetryIngestor
 	events    EventReader
+	findings  FindingReader
 }
 
 func New(
 	readinessChecker *readiness.Checker,
 	ingestor TelemetryIngestor,
 	events EventReader,
+	findings FindingReader,
 ) *Server {
 	s := &Server{
 		mux:       http.NewServeMux(),
 		readiness: readinessChecker,
 		ingestor:  ingestor,
 		events:    events,
+		findings:  findings,
 	}
 	s.routes()
 	return s
@@ -56,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/ready", method(http.MethodGet, s.handleReady))
 	s.mux.HandleFunc("/api/v1/telemetry", method(http.MethodPost, s.handleTelemetry))
 	s.mux.HandleFunc("/api/v1/events", method(http.MethodGet, s.handleEvents))
+	s.mux.HandleFunc("/api/v1/findings", method(http.MethodGet, s.handleFindings))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -153,6 +161,61 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		"count":  len(events),
 		"events": events,
 	})
+}
+
+func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
+	if s.findings == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
+		return
+	}
+
+	query, err := parseFindingQuery(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_query", err.Error())
+		return
+	}
+
+	findings, err := s.findings.ListFindings(r.Context(), query)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "findings could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":    len(findings),
+		"findings": findings,
+	})
+}
+
+func parseFindingQuery(r *http.Request) (database.FindingQuery, error) {
+	values := r.URL.Query()
+	query := database.FindingQuery{
+		Limit:    50,
+		Status:   strings.TrimSpace(values.Get("status")),
+		Severity: strings.TrimSpace(values.Get("severity")),
+	}
+
+	if raw := strings.TrimSpace(values.Get("limit")); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 200 {
+			return database.FindingQuery{}, errors.New("limit must be an integer between 1 and 200")
+		}
+		query.Limit = limit
+	}
+
+	switch query.Status {
+	case "", "new", "triaged", "investigating", "false_positive", "benign_expected", "duplicate", "confirmed", "contained", "closed":
+	default:
+		return database.FindingQuery{}, errors.New("status is not supported")
+	}
+
+	switch query.Severity {
+	case "", "informational", "low", "medium", "high", "critical":
+	default:
+		return database.FindingQuery{}, errors.New("severity is not supported")
+	}
+
+	return query, nil
 }
 
 func parseEventQuery(r *http.Request) (database.EventQuery, error) {

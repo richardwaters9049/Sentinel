@@ -15,6 +15,8 @@ help:
 	@echo "  make check           Format check, vet, tests, race tests, and simulator build"
 	@echo "  make smoke           Run the Phase 0 foundation smoke test"
 	@echo "  make smoke-phase1    Run the Phase 1 telemetry vertical-slice smoke test"
+	@echo "  make resilience-phase1 Run the Phase 1 dependency recovery checks"
+	@echo "  make smoke-phase2    Run the Phase 2 detection-engineering smoke test"
 	@echo "  make resilience-phase1  Run Phase 1 dependency failure/recovery tests"
 
 dev-up:
@@ -63,3 +65,6 @@ smoke-phase1:
 
 resilience-phase1:
 	./scripts/phase1-resilience.sh
+
+smoke-phase2:
+	./scripts/phase2-smoke.sh

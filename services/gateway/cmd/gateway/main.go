@@ -11,6 +11,7 @@ import (
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/config"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/detection"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/httpserver"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/messaging"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
@@ -53,7 +54,8 @@ func main() {
 	defer natsClient.Close()
 
 	telemetryService := telemetry.NewService(natsClient)
-	persistenceHandler := telemetry.PersistenceHandler(db)
+	detectionEngine := detection.New(db)
+	persistenceHandler := telemetry.PersistenceHandler(db, detectionEngine)
 
 	subscription, err := natsClient.StartTelemetryConsumer(
 		ctx,
@@ -79,7 +81,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.New(readinessChecker, telemetryService, db).Handler(),
+		Handler:           httpserver.New(readinessChecker, telemetryService, db, db).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 

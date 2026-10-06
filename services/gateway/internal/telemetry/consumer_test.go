@@ -19,24 +19,27 @@ func (s *recordingStore) SaveEvent(_ context.Context, event Event) (bool, error)
 	return s.inserted, s.err
 }
 
-func TestPersistenceHandlerStoresEvent(t *testing.T) {
+type recordingProcessor struct {
+	event Event
+	calls int
+	err   error
+}
+
+func (p *recordingProcessor) Process(_ context.Context, event Event) error {
+	p.calls++
+	p.event = event
+	return p.err
+}
+
+func TestPersistenceHandlerStoresAndProcessesNewEvent(t *testing.T) {
 	t.Parallel()
 
 	store := &recordingStore{inserted: true}
-	handler := PersistenceHandler(store)
+	processor := &recordingProcessor{}
+	handler := PersistenceHandler(store, processor)
 
-	event, err := Normalize(
-		minimalRequest(time.Now().UTC()),
-		time.Now().UTC(),
-	)
-	if err != nil {
-		t.Fatalf("normalize fixture: %v", err)
-	}
-
-	payload, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("marshal fixture: %v", err)
-	}
+	event := normalizedFixture(t)
+	payload := marshalEvent(t, event)
 
 	if err := handler(context.Background(), payload); err != nil {
 		t.Fatalf("expected handler to persist event, got %v", err)
@@ -45,13 +48,32 @@ func TestPersistenceHandlerStoresEvent(t *testing.T) {
 	if store.event.EventID != event.EventID {
 		t.Fatalf("expected event id %q, got %q", event.EventID, store.event.EventID)
 	}
+	if processor.calls != 1 || processor.event.EventID != event.EventID {
+		t.Fatalf("expected persisted event to be processed once")
+	}
+}
+
+func TestPersistenceHandlerSkipsProcessorForDuplicateEvent(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingStore{inserted: false}
+	processor := &recordingProcessor{}
+	handler := PersistenceHandler(store, processor)
+
+	if err := handler(context.Background(), marshalEvent(t, normalizedFixture(t))); err != nil {
+		t.Fatalf("expected duplicate event to be harmless, got %v", err)
+	}
+
+	if processor.calls != 0 {
+		t.Fatalf("expected duplicate event not to be processed, got %d calls", processor.calls)
+	}
 }
 
 func TestPersistenceHandlerRejectsUnknownSchema(t *testing.T) {
 	t.Parallel()
 
 	store := &recordingStore{}
-	handler := PersistenceHandler(store)
+	handler := PersistenceHandler(store, nil)
 
 	payload := []byte(`{"event_id":"evt_test","schema_version":"99.0.0"}`)
 	err := handler(context.Background(), payload)
@@ -69,7 +91,27 @@ func TestPersistenceHandlerReturnsStoreFailure(t *testing.T) {
 	t.Parallel()
 
 	store := &recordingStore{err: errors.New("database unavailable")}
-	handler := PersistenceHandler(store)
+	handler := PersistenceHandler(store, nil)
+
+	if err := handler(context.Background(), marshalEvent(t, normalizedFixture(t))); err == nil {
+		t.Fatal("expected storage error")
+	}
+}
+
+func TestPersistenceHandlerReturnsProcessorFailure(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingStore{inserted: true}
+	processor := &recordingProcessor{err: errors.New("detection unavailable")}
+	handler := PersistenceHandler(store, processor)
+
+	if err := handler(context.Background(), marshalEvent(t, normalizedFixture(t))); err == nil {
+		t.Fatal("expected processor error")
+	}
+}
+
+func normalizedFixture(t *testing.T) Event {
+	t.Helper()
 
 	event, err := Normalize(
 		minimalRequest(time.Now().UTC()),
@@ -78,13 +120,15 @@ func TestPersistenceHandlerReturnsStoreFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize fixture: %v", err)
 	}
+	return event
+}
+
+func marshalEvent(t *testing.T, event Event) []byte {
+	t.Helper()
 
 	payload, err := json.Marshal(event)
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-
-	if err := handler(context.Background(), payload); err == nil {
-		t.Fatal("expected storage error")
-	}
+	return payload
 }

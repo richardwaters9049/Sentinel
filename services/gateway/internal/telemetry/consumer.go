@@ -16,6 +16,10 @@ type EventStore interface {
 	SaveEvent(context.Context, Event) (bool, error)
 }
 
+type EventProcessor interface {
+	Process(context.Context, Event) error
+}
+
 type permanentError struct {
 	err error
 }
@@ -32,7 +36,10 @@ func (e permanentError) Permanent() bool {
 	return true
 }
 
-func PersistenceHandler(store EventStore) func(context.Context, []byte) error {
+func PersistenceHandler(
+	store EventStore,
+	processor EventProcessor,
+) func(context.Context, []byte) error {
 	return func(ctx context.Context, payload []byte) error {
 		if store == nil {
 			return fmt.Errorf("event store is not initialised")
@@ -55,8 +62,17 @@ func PersistenceHandler(store EventStore) func(context.Context, []byte) error {
 			}
 		}
 
-		if _, err := store.SaveEvent(ctx, event); err != nil {
+		inserted, err := store.SaveEvent(ctx, event)
+		if err != nil {
 			return fmt.Errorf("persist telemetry event %s: %w", event.EventID, err)
+		}
+
+		if !inserted || processor == nil {
+			return nil
+		}
+
+		if err := processor.Process(ctx, event); err != nil {
+			return fmt.Errorf("process persisted telemetry event %s: %w", event.EventID, err)
 		}
 
 		return nil

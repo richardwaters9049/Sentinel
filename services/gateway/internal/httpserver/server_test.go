@@ -34,6 +34,17 @@ func (s *stubEventReader) ListEvents(_ context.Context, query database.EventQuer
 	return s.events, s.err
 }
 
+type stubFindingReader struct {
+	findings []database.FindingRecord
+	err      error
+	query    database.FindingQuery
+}
+
+func (s *stubFindingReader) ListFindings(_ context.Context, query database.FindingQuery) ([]database.FindingRecord, error) {
+	s.query = query
+	return s.findings, s.err
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
 
@@ -82,7 +93,7 @@ func TestReadyReturnsUnavailableWhenDependencyFails(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	res := httptest.NewRecorder()
 
-	New(checker, nil, nil).Handler().ServeHTTP(res, req)
+	New(checker, nil, nil, nil).Handler().ServeHTTP(res, req)
 
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, res.Code)
@@ -215,6 +226,59 @@ func TestEventsRejectsInvalidLimit(t *testing.T) {
 	}
 }
 
+func TestFindingsReturnsStoredFindings(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		findings: []database.FindingRecord{
+			{
+				ID:          "fnd_test_001",
+				DetectionID: "DET-AUTH-001",
+				Severity:    "high",
+				Status:      "new",
+			},
+		},
+	}
+
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?limit=10&severity=high&status=new", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if reader.query.Limit != 10 || reader.query.Severity != "high" || reader.query.Status != "new" {
+		t.Fatalf("unexpected finding query: %#v", reader.query)
+	}
+	if !strings.Contains(res.Body.String(), "DET-AUTH-001") {
+		t.Fatalf("expected finding in response, got %s", res.Body.String())
+	}
+}
+
+func TestFindingsRejectsInvalidSeverity(t *testing.T) {
+	t.Parallel()
+
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?severity=extreme", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, &stubFindingReader{}).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.Code)
+	}
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -254,5 +318,5 @@ func newTestServer(
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	return New(checker, ingestor, events)
+	return New(checker, ingestor, events, nil)
 }
