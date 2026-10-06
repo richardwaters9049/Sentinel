@@ -1,25 +1,26 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test test fmt check smoke smoke-phase1 resilience-phase1
+.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2
 
 help:
 	@echo "Sentinel development commands"
-	@echo "  make dev-up          Start PostgreSQL and NATS"
-	@echo "  make dev-down        Stop local infrastructure"
-	@echo "  make dev-logs        Follow local infrastructure logs"
-	@echo "  make gateway-run     Run the Go gateway"
-	@echo "  make gateway-test    Run gateway tests"
-	@echo "  make gateway-vet     Run go vet for the gateway"
-	@echo "  make simulator-run   Run the default synthetic telemetry scenario"
-	@echo "  make simulator-test  Run simulator tests/build checks"
-	@echo "  make test            Run all current tests"
-	@echo "  make fmt             Format Go code"
-	@echo "  make check           Format check, vet, tests, race tests, and simulator build"
-	@echo "  make smoke           Run the Phase 0 foundation smoke test"
-	@echo "  make smoke-phase1    Run the Phase 1 telemetry vertical-slice smoke test"
-	@echo "  make resilience-phase1 Run the Phase 1 dependency recovery checks"
-	@echo "  make smoke-phase2    Run the Phase 2 detection-engineering smoke test"
-	@echo "  make workflow-phase2 Run the Phase 2 analyst workflow and detection-control test"
-	@echo "  make catalogue-phase2 Run the Phase 2 multi-detection catalogue test"
-	@echo "  make resilience-phase1  Run Phase 1 dependency failure/recovery tests"
+	@echo "  make dev-up           Start PostgreSQL and NATS"
+	@echo "  make dev-down         Stop local infrastructure"
+	@echo "  make dev-logs         Follow local infrastructure logs"
+	@echo "  make gateway-run      Run the Go gateway"
+	@echo "  make gateway-test     Run gateway tests"
+	@echo "  make gateway-vet      Run go vet for the gateway"
+	@echo "  make simulator-run    Run the default synthetic telemetry scenario"
+	@echo "  make simulator-test   Run simulator tests and vet"
+	@echo "  make test             Run all current tests"
+	@echo "  make fmt              Format Go code"
+	@echo "  make check            Formatting, vet, tests, and race detector"
+	@echo "  make smoke            Run the Phase 0 foundation smoke test"
+	@echo "  make smoke-phase1     Run the Phase 1 telemetry smoke test"
+	@echo "  make resilience-phase1 Run dependency failure/recovery tests"
+	@echo "  make smoke-phase2     Run the temporal detection smoke test"
+	@echo "  make workflow-phase2  Run analyst workflow/runtime-control checks"
+	@echo "  make catalogue-phase2 Run multi-detection catalogue checks"
+	@echo "  make quality-phase2   Run quality metrics/evidence checks"
+	@echo "  make final-phase2     Run the complete Phase 2 regression suite"
 
 dev-up:
 	docker compose up -d
@@ -76,3 +77,9 @@ workflow-phase2:
 
 catalogue-phase2:
 	./scripts/phase2-catalogue-smoke.sh
+
+quality-phase2:
+	./scripts/phase2-quality-smoke.sh
+
+final-phase2:
+	./scripts/phase2-final-regression.sh

@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering is in progress.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete.
 
 The first production-shaped vertical slice is now implemented:
 

@@ -28,8 +28,10 @@ type EventReader interface {
 type AnalystStore interface {
 	ListFindings(context.Context, database.FindingQuery) ([]database.FindingRecord, error)
 	GetFinding(context.Context, string) (database.FindingDetail, error)
+	GetFindingEvidence(context.Context, string, int) (database.FindingEvidenceContext, error)
 	UpdateFindingStatus(context.Context, string, string, string, string) (database.FindingDetail, error)
 	ListDetections(context.Context) ([]database.DetectionRecord, error)
+	DetectionMetrics(context.Context) ([]database.DetectionMetrics, error)
 	SetDetectionEnabled(context.Context, string, bool, string, string) (database.DetectionRecord, error)
 }
 
@@ -69,8 +71,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/events", method(http.MethodGet, s.handleEvents))
 	s.mux.HandleFunc("/api/v1/findings", method(http.MethodGet, s.handleFindings))
 	s.mux.HandleFunc("GET /api/v1/findings/{id}", s.handleFindingDetail)
+	s.mux.HandleFunc("GET /api/v1/findings/{id}/evidence", s.handleFindingEvidence)
 	s.mux.HandleFunc("PATCH /api/v1/findings/{id}/status", s.handleFindingStatus)
 	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
+	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
 	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
 }
 
@@ -218,6 +222,59 @@ func (s *Server) handleFindingDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, finding)
+}
+
+func (s *Server) handleFindingEvidence(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
+		return
+	}
+
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_finding_id", "finding id is required")
+		return
+	}
+
+	contextMinutes := 5
+	if raw := strings.TrimSpace(r.URL.Query().Get("context_minutes")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 60 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_query", "context_minutes must be an integer between 0 and 60")
+			return
+		}
+		contextMinutes = value
+	}
+
+	evidence, err := s.analyst.GetFindingEvidence(r.Context(), id, contextMinutes)
+	if err != nil {
+		if errors.Is(err, database.ErrFindingNotFound) {
+			writeAPIError(w, http.StatusNotFound, "finding_not_found", "finding was not found")
+			return
+		}
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "finding evidence could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, evidence)
+}
+
+func (s *Server) handleDetectionMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "detections_unavailable", "detection storage is unavailable")
+		return
+	}
+
+	metrics, err := s.analyst.DetectionMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "detection metrics could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":   len(metrics),
+		"metrics": metrics,
+	})
 }
 
 func (s *Server) handleFindingStatus(w http.ResponseWriter, r *http.Request) {
