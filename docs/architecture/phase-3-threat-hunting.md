@@ -2,11 +2,13 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-3-threat-hunting
 ```
+
+Phase 3 now includes saved and versioned hunts, bounded multi-field/temporal queries, durable hunt-run history, asset/identity pivots, investigation cases, exact hunt-result attachment, ownership/priority management, analyst notes, audit history, unified timelines, workflow metrics, and a complete regression suite.
 
 ## Goal
 
@@ -354,6 +356,30 @@ The test verifies:
 - hunt metrics;
 - investigation metrics.
 
+## Final Phase 3 resilience and regression pass
+
+The final Phase 3 regression command is:
+
+```bash
+make final-phase3
+```
+
+It verifies the complete Sentinel backend baseline through Phase 3:
+
+1. formatting, vet, unit tests, and Go race detection;
+2. the complete Phase 2 regression baseline, including dependency resilience;
+3. saved hunts and hypothesis/query persistence;
+4. hunt execution and durable run history;
+5. investigation creation, notes, workflow, audit, and unified timelines;
+6. asset and identity pivots;
+7. exact hunt-run result attachment;
+8. investigation ownership and priority updates;
+9. append-only hunt versioning;
+10. richer bounded hunt operators;
+11. hunt and investigation metrics.
+
+Phase 3 reuses the complete Phase 2 regression because threat hunting and investigations depend on the same event, detection, evidence, and resilience guarantees.
+
 ## Phase 3 roadmap
 
 The first slice deliberately focuses on durable analyst primitives.
@@ -368,6 +394,8 @@ Next work should add:
 - [x] saved hunt editing/versioning;
 - [x] richer temporal and multi-field hunt operators;
 - [x] investigation/hunt metrics;
-- [ ] final Phase 3 resilience and regression testing.
+- [x] final Phase 3 resilience and regression testing.
+
+Phase 3 is complete.
 
 The web analyst console should consume these stable APIs rather than invent its own investigation state.
