@@ -10,17 +10,19 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Initial architecture and foundation phase.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering is next.
 
-The first implementation milestone is a small but complete vertical slice:
+The first production-shaped vertical slice is now implemented:
 
-1. generate synthetic telemetry;
-2. ingest it through a Go API;
-3. place events on an event bus;
-4. persist normalised events;
-5. evaluate events against deterministic detections;
-6. create findings;
-7. display findings in an analyst-facing web console.
+1. generate safe synthetic telemetry;
+2. ingest it through `POST /api/v1/telemetry`;
+3. validate and normalise events against schema v1;
+4. publish accepted events through NATS JetStream;
+5. persist events, assets, and identities in PostgreSQL;
+6. query stored telemetry through `GET /api/v1/events`;
+7. verify idempotency and dependency recovery with repeatable smoke/resilience tests.
+
+The next milestone adds deterministic detections and findings on top of this event pipeline.
 
 The system should grow incrementally from that foundation. Every major component must be testable in isolation and understandable without requiring the full stack to run.
 

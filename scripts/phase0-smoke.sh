@@ -4,12 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GATEWAY_PORT="${SENTINEL_SMOKE_PORT:-18080}"
 GATEWAY_PID=""
+GATEWAY_BINARY="/tmp/sentinel-phase0-smoke-gateway"
 
 cleanup() {
   if [[ -n "${GATEWAY_PID}" ]] && kill -0 "${GATEWAY_PID}" 2>/dev/null; then
     kill "${GATEWAY_PID}" 2>/dev/null || true
     wait "${GATEWAY_PID}" 2>/dev/null || true
   fi
+
+  rm -f "${GATEWAY_BINARY}"
 }
 
 trap cleanup EXIT
@@ -32,11 +35,27 @@ if ! docker compose exec -T postgres pg_isready -U sentinel -d sentinel >/dev/nu
   exit 1
 fi
 
-echo "Starting gateway on port ${GATEWAY_PORT}..."
+echo "Waiting for NATS..."
+for _ in {1..30}; do
+  if curl -fsS http://127.0.0.1:8222/healthz >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! curl -fsS http://127.0.0.1:8222/healthz >/dev/null 2>&1; then
+  echo "NATS did not become ready." >&2
+  exit 1
+fi
+
+echo "Building gateway..."
 (
   cd services/gateway
-  SENTINEL_HTTP_ADDR=":${GATEWAY_PORT}" go run ./cmd/gateway
-) >/tmp/sentinel-phase0-gateway.log 2>&1 &
+  go build -o "${GATEWAY_BINARY}" ./cmd/gateway
+)
+
+echo "Starting gateway on port ${GATEWAY_PORT}..."
+SENTINEL_HTTP_ADDR=":${GATEWAY_PORT}" "${GATEWAY_BINARY}" >/tmp/sentinel-phase0-gateway.log 2>&1 &
 GATEWAY_PID=$!
 
 for _ in {1..30}; do

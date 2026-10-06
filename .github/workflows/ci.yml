@@ -9,12 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  gateway:
-    name: Gateway checks
+  go:
+    name: Go checks
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/gateway
 
     steps:
       - name: Check out repository
@@ -24,13 +21,34 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.27.1"
-          cache-dependency-path: services/gateway/go.mod
+          cache-dependency-path: |
+            services/gateway/go.sum
+            simulator/go.mod
 
-      - name: Check formatting
+      - name: Check gateway formatting
+        working-directory: services/gateway
         run: test -z "$(gofmt -l .)"
 
-      - name: Vet
+      - name: Vet gateway
+        working-directory: services/gateway
         run: go vet ./...
 
-      - name: Test
+      - name: Test gateway
+        working-directory: services/gateway
+        run: go test ./...
+
+      - name: Race-test gateway
+        working-directory: services/gateway
+        run: go test -race ./...
+
+      - name: Check simulator formatting
+        working-directory: simulator
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet simulator
+        working-directory: simulator
+        run: go vet ./...
+
+      - name: Test simulator
+        working-directory: simulator
         run: go test ./...
