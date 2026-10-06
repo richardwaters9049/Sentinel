@@ -42,6 +42,7 @@ type Network struct {
 	SourceIP        string `json:"source_ip,omitempty"`
 	DestinationIP   string `json:"destination_ip,omitempty"`
 	DestinationPort int    `json:"destination_port,omitempty"`
+	DestinationZone string `json:"destination_zone,omitempty"`
 	Protocol        string `json:"protocol,omitempty"`
 }
 
@@ -127,6 +128,7 @@ func Normalize(req IngestRequest, now time.Time) (Event, error) {
 			SourceIP:        strings.TrimSpace(req.Network.SourceIP),
 			DestinationIP:   strings.TrimSpace(req.Network.DestinationIP),
 			DestinationPort: req.Network.DestinationPort,
+			DestinationZone: strings.ToLower(strings.TrimSpace(req.Network.DestinationZone)),
 			Protocol:        strings.ToLower(strings.TrimSpace(req.Network.Protocol)),
 		}
 	}
@@ -212,6 +214,9 @@ func validate(req IngestRequest, now time.Time) error {
 		}
 		if req.Network.DestinationPort < 0 || req.Network.DestinationPort > 65535 {
 			errs = append(errs, errors.New("network.destination_port must be between 0 and 65535"))
+		}
+		if len(strings.TrimSpace(req.Network.DestinationZone)) > 64 {
+			errs = append(errs, errors.New("network.destination_zone must be 64 characters or fewer"))
 		}
 		if len(strings.TrimSpace(req.Network.Protocol)) > 32 {
 			errs = append(errs, errors.New("network.protocol must be 32 characters or fewer"))

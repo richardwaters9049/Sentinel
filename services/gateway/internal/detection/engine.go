@@ -5,19 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
 
-const (
-	authFailureThreshold = 4
-	authWindow           = 5 * time.Minute
-)
-
 type Repository interface {
+	IsDetectionEnabled(context.Context, string) (bool, error)
 	RecentAuthenticationFailures(
 		context.Context,
 		string,
@@ -29,12 +24,32 @@ type Repository interface {
 	CreateFinding(context.Context, Finding) (bool, error)
 }
 
+type Rule interface {
+	ID() string
+	Evaluate(context.Context, telemetry.Event) (*Finding, error)
+}
+
 type Engine struct {
 	repository Repository
+	rules      []Rule
 }
 
 func New(repository Repository) *Engine {
-	return &Engine{repository: repository}
+	return &Engine{
+		repository: repository,
+		rules: []Rule{
+			NewAuthBurstRule(repository),
+			NewServiceAccountLoginRule(),
+			NewCorporateToOTRule(),
+		},
+	}
+}
+
+func NewWithRules(repository Repository, rules ...Rule) *Engine {
+	return &Engine{
+		repository: repository,
+		rules:      append([]Rule(nil), rules...),
+	}
 }
 
 func (e *Engine) Process(ctx context.Context, event telemetry.Event) error {
@@ -42,92 +57,33 @@ func (e *Engine) Process(ctx context.Context, event telemetry.Event) error {
 		return fmt.Errorf("detection engine is not initialised")
 	}
 
-	if !isSuccessfulLogin(event) {
-		return nil
-	}
+	for _, rule := range e.rules {
+		if rule == nil {
+			continue
+		}
 
-	identityID, sourceIP, ok := correlationKeys(event)
-	if !ok {
-		return nil
-	}
+		enabled, err := e.repository.IsDetectionEnabled(ctx, rule.ID())
+		if err != nil {
+			return fmt.Errorf("check detection state for %s: %w", rule.ID(), err)
+		}
+		if !enabled {
+			continue
+		}
 
-	failures, err := e.repository.RecentAuthenticationFailures(
-		ctx,
-		identityID,
-		sourceIP,
-		event.Timestamp,
-		authWindow,
-		authFailureThreshold,
-	)
-	if err != nil {
-		return fmt.Errorf("query authentication failures: %w", err)
-	}
+		finding, err := rule.Evaluate(ctx, event)
+		if err != nil {
+			return fmt.Errorf("evaluate detection %s: %w", rule.ID(), err)
+		}
+		if finding == nil {
+			continue
+		}
 
-	if len(failures) < authFailureThreshold {
-		return nil
-	}
-
-	sort.Slice(failures, func(i, j int) bool {
-		return failures[i].Timestamp.Before(failures[j].Timestamp)
-	})
-
-	eventIDs := make([]string, 0, len(failures)+1)
-	for _, failure := range failures {
-		eventIDs = append(eventIDs, failure.EventID)
-	}
-	eventIDs = append(eventIDs, event.EventID)
-
-	firstObserved := failures[0].Timestamp.UTC()
-	lastObserved := event.Timestamp.UTC()
-
-	finding := Finding{
-		ID:               findingID(AuthBurstDetectionID, identityID, sourceIP, event.EventID),
-		DetectionID:      AuthBurstDetectionID,
-		DetectionVersion: AuthBurstDetectionVersion,
-		DedupKey:         dedupKey(AuthBurstDetectionID, identityID, sourceIP, event.EventID),
-		Title:            "Repeated Authentication Failures Followed by Success",
-		Severity:         "high",
-		Confidence:       85,
-		Status:           "new",
-		FirstObservedAt:  firstObserved,
-		LastObservedAt:   lastObserved,
-		Evidence: Evidence{
-			EventIDs:       eventIDs,
-			FailureCount:   len(failures),
-			IdentityID:     identityID,
-			SourceIP:       sourceIP,
-			WindowSeconds:  int(authWindow.Seconds()),
-			SuccessEventID: event.EventID,
-		},
-		EventIDs: eventIDs,
-	}
-
-	if _, err := e.repository.CreateFinding(ctx, finding); err != nil {
-		return fmt.Errorf("create finding: %w", err)
+		if _, err := e.repository.CreateFinding(ctx, *finding); err != nil {
+			return fmt.Errorf("create finding for %s: %w", rule.ID(), err)
+		}
 	}
 
 	return nil
-}
-
-func isSuccessfulLogin(event telemetry.Event) bool {
-	return event.Event.Category == "authentication" &&
-		event.Event.Action == "login" &&
-		event.Event.Outcome == "success"
-}
-
-func correlationKeys(event telemetry.Event) (string, string, bool) {
-	if event.Actor == nil || event.Network == nil {
-		return "", "", false
-	}
-
-	identityID := strings.TrimSpace(event.Actor.ID)
-	sourceIP := strings.TrimSpace(event.Network.SourceIP)
-
-	if identityID == "" || sourceIP == "" {
-		return "", "", false
-	}
-
-	return identityID, sourceIP, true
 }
 
 func findingID(parts ...string) string {

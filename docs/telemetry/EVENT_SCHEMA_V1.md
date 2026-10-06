@@ -207,11 +207,14 @@ Optional network context currently supports:
 - source IP;
 - destination IP;
 - destination port;
+- destination zone;
 - protocol.
 
 IP values are validated using the Go standard library.
 
 Destination port must be between 0 and 65535.
+
+`network.destination_zone` is optional, normalised to lowercase, and currently used by boundary-aware detections such as DET-NET-001.
 
 ## Labels
 

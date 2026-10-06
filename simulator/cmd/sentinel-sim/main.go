@@ -63,6 +63,14 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			authEvent(start, "success", "10.10.10.20"),
 		}, nil
+	case "service-account-login":
+		return []map[string]interface{}{
+			serviceAccountLoginEvent(start),
+		}, nil
+	case "it-to-ot-connection":
+		return []map[string]interface{}{
+			corporateToOTEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -119,6 +127,74 @@ func authEvent(timestamp time.Time, outcome, sourceIP string) map[string]interfa
 		"labels": map[string]string{
 			"environment": "lab",
 			"scenario":    "auth-burst",
+		},
+	}
+}
+
+func serviceAccountLoginEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "identity",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-identity-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-app-server-01",
+			"hostname": "application-server-01",
+			"zone":     "corporate",
+		},
+		"actor": map[string]interface{}{
+			"id":   "svc-backup",
+			"type": "service_account",
+			"name": "Backup Service",
+		},
+		"event": map[string]interface{}{
+			"category": "authentication",
+			"action":   "login",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.20.15",
+			"destination_ip":   "10.10.20.30",
+			"destination_port": 22,
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "service-account-login",
+		},
+	}
+}
+
+func corporateToOTEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "network",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-network-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-employee-ws-01",
+			"hostname": "employee-workstation-01",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "network",
+			"action":   "connection",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.10.25",
+			"destination_ip":   "10.30.0.10",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "it-to-ot-connection",
 		},
 	}
 }

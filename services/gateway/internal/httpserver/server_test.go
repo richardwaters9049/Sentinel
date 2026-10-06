@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -35,14 +37,156 @@ func (s *stubEventReader) ListEvents(_ context.Context, query database.EventQuer
 }
 
 type stubFindingReader struct {
-	findings []database.FindingRecord
-	err      error
-	query    database.FindingQuery
+	findings         []database.FindingRecord
+	detail           database.FindingDetail
+	evidence         database.FindingEvidenceContext
+	detections       []database.DetectionRecord
+	metrics          []database.DetectionMetrics
+	err              error
+	query            database.FindingQuery
+	statusID         string
+	status           string
+	actorID          string
+	requestID        string
+	detectionID      string
+	detectionEnabled bool
+	evidenceID       string
+	contextMinutes   int
 }
 
 func (s *stubFindingReader) ListFindings(_ context.Context, query database.FindingQuery) ([]database.FindingRecord, error) {
 	s.query = query
 	return s.findings, s.err
+}
+
+func (s *stubFindingReader) GetFindingEvidence(_ context.Context, id string, contextMinutes int) (database.FindingEvidenceContext, error) {
+	s.evidenceID = id
+	s.contextMinutes = contextMinutes
+	if s.err != nil {
+		return database.FindingEvidenceContext{}, s.err
+	}
+	result := s.evidence
+	result.FindingID = id
+	result.ContextMinutes = contextMinutes
+	return result, nil
+}
+
+func (s *stubFindingReader) GetFinding(_ context.Context, id string) (database.FindingDetail, error) {
+	if s.err != nil {
+		return database.FindingDetail{}, s.err
+	}
+	detail := s.detail
+	if detail.ID == "" {
+		detail.ID = id
+	}
+	return detail, nil
+}
+
+func (s *stubFindingReader) UpdateFindingStatus(
+	_ context.Context,
+	id string,
+	status string,
+	actorID string,
+	requestID string,
+) (database.FindingDetail, error) {
+	s.statusID = id
+	s.status = status
+	s.actorID = actorID
+	s.requestID = requestID
+	if s.err != nil {
+		return database.FindingDetail{}, s.err
+	}
+	detail := s.detail
+	detail.ID = id
+	detail.Status = status
+	return detail, nil
+}
+
+func (s *stubFindingReader) ListDetections(context.Context) ([]database.DetectionRecord, error) {
+	return s.detections, s.err
+}
+
+func (s *stubFindingReader) DetectionMetrics(context.Context) ([]database.DetectionMetrics, error) {
+	return s.metrics, s.err
+}
+
+func (s *stubFindingReader) SetDetectionEnabled(
+	_ context.Context,
+	id string,
+	enabled bool,
+	actorID string,
+	requestID string,
+) (database.DetectionRecord, error) {
+	s.detectionID = id
+	s.detectionEnabled = enabled
+	s.actorID = actorID
+	s.requestID = requestID
+	if s.err != nil {
+		return database.DetectionRecord{}, s.err
+	}
+	return database.DetectionRecord{ID: id, Enabled: enabled}, nil
+}
+
+func (s *stubFindingReader) CreateHunt(
+	context.Context,
+	string,
+	string,
+	string,
+	hunting.Query,
+	string,
+) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) ListHunts(context.Context) ([]hunting.Definition, error) {
+	return []hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) GetHunt(context.Context, string) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) RunHunt(context.Context, string, string, hunting.Query) (hunting.RunResult, error) {
+	return hunting.RunResult{}, s.err
+}
+
+func (s *stubFindingReader) CreateInvestigation(
+	context.Context,
+	database.InvestigationCreateInput,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) ListInvestigations(
+	context.Context,
+	string,
+	int,
+) ([]investigation.Record, error) {
+	return []investigation.Record{}, s.err
+}
+
+func (s *stubFindingReader) GetInvestigation(context.Context, string) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) AddInvestigationNote(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) UpdateInvestigationStatus(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
 }
 
 func TestHealth(t *testing.T) {
@@ -276,6 +420,253 @@ func TestFindingsRejectsInvalidSeverity(t *testing.T) {
 
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.Code)
+	}
+}
+
+func TestFindingDetailReturnsEvidenceAndAudit(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		detail: database.FindingDetail{
+			FindingRecord: database.FindingRecord{
+				ID:          "fnd_test_001",
+				DetectionID: "DET-AUTH-001",
+				Status:      "new",
+			},
+			Events: []database.EventEvidenceRecord{{ID: "evt_1"}},
+			Audit:  []database.AuditRecord{{Action: "finding.status_changed"}},
+		},
+	}
+
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test_001", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "\"evt_1\"") {
+		t.Fatalf("expected evidence event in response, got %s", res.Body.String())
+	}
+}
+
+func TestFindingStatusRequiresActor(t *testing.T) {
+	t.Parallel()
+
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/findings/fnd_test_001/status",
+		strings.NewReader(`{"status":"triaged"}`),
+	)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, &stubFindingReader{}).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "actor_required") {
+		t.Fatalf("expected actor_required response, got %s", res.Body.String())
+	}
+}
+
+func TestFindingStatusUpdatesAuditedWorkflow(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/findings/fnd_test_001/status",
+		strings.NewReader(`{"status":"triaged"}`),
+	)
+	req.Header.Set("X-Sentinel-Actor", "analyst-richard")
+	req.Header.Set("X-Request-ID", "req-001")
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if reader.statusID != "fnd_test_001" || reader.status != "triaged" {
+		t.Fatalf("unexpected status update: %q %q", reader.statusID, reader.status)
+	}
+	if reader.actorID != "analyst-richard" || reader.requestID != "req-001" {
+		t.Fatalf("audit context was not forwarded")
+	}
+}
+
+func TestFindingStatusMapsInvalidTransitionToConflict(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		err: database.ErrInvalidTransition,
+	}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/findings/fnd_test_001/status",
+		strings.NewReader(`{"status":"confirmed"}`),
+	)
+	req.Header.Set("X-Sentinel-Actor", "analyst-richard")
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d", http.StatusConflict, res.Code)
+	}
+}
+
+func TestDetectionsReturnsDetectionMetadata(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		detections: []database.DetectionRecord{
+			{ID: "DET-AUTH-001", Enabled: true, Severity: "high"},
+		},
+	}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/detections", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, res.Code)
+	}
+	if !strings.Contains(res.Body.String(), "DET-AUTH-001") {
+		t.Fatalf("expected detection metadata, got %s", res.Body.String())
+	}
+}
+
+func TestDetectionStateUpdateRequiresActorAndBoolean(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/detections/DET-AUTH-001",
+		strings.NewReader(`{"enabled":false}`),
+	)
+	req.Header.Set("X-Sentinel-Actor", "analyst-richard")
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if reader.detectionID != "DET-AUTH-001" || reader.detectionEnabled {
+		t.Fatalf("expected DET-AUTH-001 to be disabled")
+	}
+}
+
+func TestFindingEvidenceReturnsLinkedAndContextEvents(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		evidence: database.FindingEvidenceContext{
+			LinkedEvents:  []database.EventEvidenceRecord{{ID: "evt_linked"}},
+			ContextEvents: []database.EventEvidenceRecord{{ID: "evt_context"}},
+		},
+	}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=10", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if reader.evidenceID != "fnd_test" || reader.contextMinutes != 10 {
+		t.Fatalf("unexpected evidence query: %q %d", reader.evidenceID, reader.contextMinutes)
+	}
+	if !strings.Contains(res.Body.String(), "evt_linked") || !strings.Contains(res.Body.String(), "evt_context") {
+		t.Fatalf("expected linked and context events, got %s", res.Body.String())
+	}
+}
+
+func TestFindingEvidenceRejectsInvalidContextWindow(t *testing.T) {
+	t.Parallel()
+
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=90", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, &stubFindingReader{}).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, res.Code)
+	}
+}
+
+func TestDetectionMetricsReturnsQualityData(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubFindingReader{
+		metrics: []database.DetectionMetrics{
+			{
+				DetectionID:        "DET-AUTH-001",
+				HitCount:           10,
+				FalsePositiveCount: 2,
+				FalsePositiveRate:  0.2,
+			},
+		},
+	}
+	checker := readiness.New(time.Second, map[string]readiness.CheckFunc{
+		"postgres": func(context.Context) error { return nil },
+		"nats":     func(context.Context) error { return nil },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/detections/metrics", nil)
+	res := httptest.NewRecorder()
+
+	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "\"false_positive_rate\":0.2") {
+		t.Fatalf("expected quality metrics, got %s", res.Body.String())
 	}
 }
 

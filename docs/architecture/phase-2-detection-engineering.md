@@ -2,13 +2,13 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-2-detection-engineering
 ```
 
-The first deterministic detection vertical slice is implemented and verified.
+The multi-detection framework, analyst workflow, first three deterministic detections, quality metrics, contextual evidence retrieval, and final resilience/regression suite are implemented and verified.
 
 ## Goal
 
@@ -72,6 +72,55 @@ Stored metadata includes:
 - enabled state;
 - structured rule definition;
 - MITRE ATT&CK context.
+
+## Multi-detection engine
+
+The detection engine now operates over a registry of independent rule implementations rather than one hard-coded detector.
+
+Each rule:
+
+- exposes a stable detection ID;
+- evaluates one normalised event;
+- may query bounded historical context when required;
+- returns either no match or one explainable finding;
+- is checked against persisted enabled/disabled state before evaluation.
+
+The current registry contains:
+
+```text
+DET-AUTH-001  Repeated Authentication Failures Followed by Success
+DET-AUTH-002  Interactive Login Using a Service Account
+DET-NET-001   Unexpected Corporate-to-OT Network Connection
+```
+
+This allows stateless single-event detections and stateful temporal detections to coexist behind the same engine contract.
+
+### DET-AUTH-002
+
+`DET-AUTH-002` detects a successful interactive login where `actor.type` is `service_account`.
+
+It is a single-event rule and does not require a historical query.
+
+### DET-NET-001
+
+`DET-NET-001` detects a `network/connection` event where:
+
+```text
+source asset zone      = corporate
+destination network zone = ot
+```
+
+The telemetry contract now carries an optional `network.destination_zone` field to support explicit boundary-aware reasoning.
+
+No ATT&CK technique is assigned to this rule yet because a zone-crossing connection alone is not sufficient evidence for a specific adversary technique.
+
+### Runtime control
+
+Every rule checks its persisted detection state before evaluation.
+
+Disabling one rule does not disable unrelated detections.
+
+The engine regression suite verifies independent per-rule enable state and prevents an unrelated rule from invoking unnecessary historical correlation queries.
 
 ## Correlation
 
@@ -156,22 +205,94 @@ The test verifies:
 - the finding contains five evidence-event links;
 - the finding is visible through the findings API.
 
+## Detection quality metrics
+
+Phase 2 exposes derived quality data through:
+
+```http
+GET /api/v1/detections/metrics
+```
+
+Metrics are calculated from persisted findings and currently include:
+
+- total hit count;
+- currently open finding count;
+- currently confirmed count;
+- false-positive count;
+- closed count;
+- false-positive rate;
+- last-triggered timestamp.
+
+The false-positive rate is:
+
+```text
+false-positive findings / total findings
+```
+
+These metrics are deliberately transparent database-derived values rather than opaque scoring.
+
+They provide the first feedback loop for tuning rules as scenario coverage grows.
+
+## Contextual evidence retrieval
+
+Finding detail already returns the events directly linked to a finding.
+
+Phase 2 now also supports bounded surrounding context:
+
+```http
+GET /api/v1/findings/{id}/evidence?context_minutes=5
+```
+
+The response separates:
+
+- `linked_events` — evidence that directly caused or contributed to the finding;
+- `context_events` — nearby telemetry associated with the same assets or identities;
+- `context_minutes` — the requested window.
+
+The context window is bounded from 0 to 60 minutes and context results are capped.
+
+Direct evidence is never mixed silently with contextual evidence. This distinction is important for analyst reasoning and later explainability work.
+
+## Final resilience and regression pass
+
+The final Phase 2 regression command is:
+
+```bash
+make final-phase2
+```
+
+It verifies:
+
+1. formatting, vet, unit tests, and Go race detection;
+2. NATS outage and automatic recovery;
+3. PostgreSQL outage, JetStream buffering, and redelivery;
+4. DET-AUTH-001 temporal correlation;
+5. analyst status workflow and append-only audit history;
+6. runtime detection disable/re-enable behaviour;
+7. DET-AUTH-002 and DET-NET-001 end-to-end;
+8. contextual evidence retrieval;
+9. detection quality metrics.
+
+This suite deliberately reuses the Phase 1 resilience checks because Phase 2 consumes the same durable event path. A detection system cannot be considered reliable if its underlying event delivery is not reliable.
+
 ## Phase 2 roadmap
 
 The remaining Phase 2 work should build on the current engine rather than adding unrelated product features.
 
 Planned work:
 
-- finding detail endpoint;
-- finding workflow/status transitions;
-- append-only audit records for analyst actions;
-- detection enable/disable state;
-- detection metadata/query API;
-- additional deterministic rules;
-- negative scenario fixtures;
-- multi-detection regression suite;
-- detection quality metrics;
-- richer evidence retrieval;
-- final Phase 2 resilience and regression testing.
+- [x] finding detail endpoint;
+- [x] finding workflow/status transitions;
+- [x] append-only audit records for analyst actions;
+- [x] detection enable/disable state;
+- [x] detection metadata/query API;
+- [x] additional deterministic rules;
+- [x] negative rule fixtures for non-matching behaviour;
+- [x] multi-detection regression suite;
+- [x] detection quality metrics;
+- [x] richer evidence retrieval;
+- [x] final Phase 2 resilience and regression testing.
 
-The analyst UI remains a later concern. The backend finding model and workflow should be stable first.
+Phase 2 is complete.
+
+The next phase can build analyst-facing product surfaces and deeper hunting/correlation capabilities on top of a tested event, detection, finding, evidence, and audit foundation.

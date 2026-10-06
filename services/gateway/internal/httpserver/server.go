@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -25,8 +27,23 @@ type EventReader interface {
 	ListEvents(context.Context, database.EventQuery) ([]telemetry.Event, error)
 }
 
-type FindingReader interface {
+type AnalystStore interface {
 	ListFindings(context.Context, database.FindingQuery) ([]database.FindingRecord, error)
+	GetFinding(context.Context, string) (database.FindingDetail, error)
+	GetFindingEvidence(context.Context, string, int) (database.FindingEvidenceContext, error)
+	UpdateFindingStatus(context.Context, string, string, string, string) (database.FindingDetail, error)
+	ListDetections(context.Context) ([]database.DetectionRecord, error)
+	DetectionMetrics(context.Context) ([]database.DetectionMetrics, error)
+	SetDetectionEnabled(context.Context, string, bool, string, string) (database.DetectionRecord, error)
+	CreateHunt(context.Context, string, string, string, hunting.Query, string) (hunting.Definition, error)
+	ListHunts(context.Context) ([]hunting.Definition, error)
+	GetHunt(context.Context, string) (hunting.Definition, error)
+	RunHunt(context.Context, string, string, hunting.Query) (hunting.RunResult, error)
+	CreateInvestigation(context.Context, database.InvestigationCreateInput) (database.InvestigationDetail, error)
+	ListInvestigations(context.Context, string, int) ([]investigation.Record, error)
+	GetInvestigation(context.Context, string) (database.InvestigationDetail, error)
+	AddInvestigationNote(context.Context, string, string, string, string) (database.InvestigationDetail, error)
+	UpdateInvestigationStatus(context.Context, string, string, string, string) (database.InvestigationDetail, error)
 }
 
 type Server struct {
@@ -34,21 +51,21 @@ type Server struct {
 	readiness *readiness.Checker
 	ingestor  TelemetryIngestor
 	events    EventReader
-	findings  FindingReader
+	analyst   AnalystStore
 }
 
 func New(
 	readinessChecker *readiness.Checker,
 	ingestor TelemetryIngestor,
 	events EventReader,
-	findings FindingReader,
+	analyst AnalystStore,
 ) *Server {
 	s := &Server{
 		mux:       http.NewServeMux(),
 		readiness: readinessChecker,
 		ingestor:  ingestor,
 		events:    events,
-		findings:  findings,
+		analyst:   analyst,
 	}
 	s.routes()
 	return s
@@ -64,6 +81,21 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/v1/telemetry", method(http.MethodPost, s.handleTelemetry))
 	s.mux.HandleFunc("/api/v1/events", method(http.MethodGet, s.handleEvents))
 	s.mux.HandleFunc("/api/v1/findings", method(http.MethodGet, s.handleFindings))
+	s.mux.HandleFunc("GET /api/v1/findings/{id}", s.handleFindingDetail)
+	s.mux.HandleFunc("GET /api/v1/findings/{id}/evidence", s.handleFindingEvidence)
+	s.mux.HandleFunc("PATCH /api/v1/findings/{id}/status", s.handleFindingStatus)
+	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
+	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
+	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
+	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
+	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
+	s.mux.HandleFunc("GET /api/v1/hunts/{id}", s.handleHuntDetail)
+	s.mux.HandleFunc("POST /api/v1/hunts/{id}/run", s.handleRunHunt)
+	s.mux.HandleFunc("GET /api/v1/investigations", s.handleInvestigations)
+	s.mux.HandleFunc("POST /api/v1/investigations", s.handleCreateInvestigation)
+	s.mux.HandleFunc("GET /api/v1/investigations/{id}", s.handleInvestigationDetail)
+	s.mux.HandleFunc("POST /api/v1/investigations/{id}/notes", s.handleInvestigationNote)
+	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}/status", s.handleInvestigationStatus)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -164,7 +196,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
-	if s.findings == nil {
+	if s.analyst == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
 		return
 	}
@@ -175,7 +207,7 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findings, err := s.findings.ListFindings(r.Context(), query)
+	findings, err := s.analyst.ListFindings(r.Context(), query)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "findings could not be queried")
 		return
@@ -185,6 +217,224 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 		"count":    len(findings),
 		"findings": findings,
 	})
+}
+
+func (s *Server) handleFindingDetail(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
+		return
+	}
+
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_finding_id", "finding id is required")
+		return
+	}
+
+	finding, err := s.analyst.GetFinding(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, database.ErrFindingNotFound) {
+			writeAPIError(w, http.StatusNotFound, "finding_not_found", "finding was not found")
+			return
+		}
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "finding could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, finding)
+}
+
+func (s *Server) handleFindingEvidence(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
+		return
+	}
+
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_finding_id", "finding id is required")
+		return
+	}
+
+	contextMinutes := 5
+	if raw := strings.TrimSpace(r.URL.Query().Get("context_minutes")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 60 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_query", "context_minutes must be an integer between 0 and 60")
+			return
+		}
+		contextMinutes = value
+	}
+
+	evidence, err := s.analyst.GetFindingEvidence(r.Context(), id, contextMinutes)
+	if err != nil {
+		if errors.Is(err, database.ErrFindingNotFound) {
+			writeAPIError(w, http.StatusNotFound, "finding_not_found", "finding was not found")
+			return
+		}
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "finding evidence could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, evidence)
+}
+
+func (s *Server) handleDetectionMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "detections_unavailable", "detection storage is unavailable")
+		return
+	}
+
+	metrics, err := s.analyst.DetectionMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "detection metrics could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":   len(metrics),
+		"metrics": metrics,
+	})
+}
+
+func (s *Server) handleFindingStatus(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "findings_unavailable", "finding storage is unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_finding_id", "finding id is required")
+		return
+	}
+
+	var request struct {
+		Status string `json:"status"`
+	}
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	request.Status = strings.TrimSpace(request.Status)
+	if request.Status == "" {
+		writeAPIError(w, http.StatusBadRequest, "status_required", "status is required")
+		return
+	}
+
+	finding, err := s.analyst.UpdateFindingStatus(
+		r.Context(),
+		id,
+		request.Status,
+		actorID,
+		strings.TrimSpace(r.Header.Get("X-Request-ID")),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, database.ErrFindingNotFound):
+			writeAPIError(w, http.StatusNotFound, "finding_not_found", "finding was not found")
+		case errors.Is(err, database.ErrInvalidTransition):
+			writeAPIError(w, http.StatusConflict, "invalid_transition", err.Error())
+		default:
+			writeAPIError(w, http.StatusServiceUnavailable, "update_failed", "finding status could not be updated")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, finding)
+}
+
+func (s *Server) handleDetections(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "detections_unavailable", "detection storage is unavailable")
+		return
+	}
+
+	detections, err := s.analyst.ListDetections(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "detections could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":      len(detections),
+		"detections": detections,
+	})
+}
+
+func (s *Server) handleDetectionState(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "detections_unavailable", "detection storage is unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_detection_id", "detection id is required")
+		return
+	}
+
+	var request struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	if request.Enabled == nil {
+		writeAPIError(w, http.StatusBadRequest, "enabled_required", "enabled is required")
+		return
+	}
+
+	detectionRecord, err := s.analyst.SetDetectionEnabled(
+		r.Context(),
+		id,
+		*request.Enabled,
+		actorID,
+		strings.TrimSpace(r.Header.Get("X-Request-ID")),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, database.ErrDetectionNotFound):
+			writeAPIError(w, http.StatusNotFound, "detection_not_found", "detection was not found")
+		case errors.Is(err, database.ErrDetectionUnchanged):
+			writeAPIError(w, http.StatusConflict, "detection_unchanged", "detection already has the requested enabled state")
+		default:
+			writeAPIError(w, http.StatusServiceUnavailable, "update_failed", "detection state could not be updated")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, detectionRecord)
+}
+
+func decodeStrictJSON(r *http.Request, target interface{}) error {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(target); err != nil {
+		return errors.New("request body must contain valid JSON")
+	}
+
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return errors.New("request body must contain exactly one JSON object")
+	}
+
+	return nil
 }
 
 func parseFindingQuery(r *http.Request) (database.FindingQuery, error) {

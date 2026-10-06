@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering is in progress.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation in progress.
 
 The first production-shaped vertical slice is now implemented:
 
@@ -22,7 +22,7 @@ The first production-shaped vertical slice is now implemented:
 6. query stored telemetry through `GET /api/v1/events`;
 7. verify idempotency and dependency recovery with repeatable smoke/resilience tests.
 
-Phase 2 now adds deterministic detections and explainable findings on top of this event pipeline; DET-AUTH-001 is the first verified rule.
+Phase 2 adds a multi-rule detection engine, explainable findings, audited analyst workflows, and runtime detection controls. The verified catalogue includes DET-AUTH-001, DET-AUTH-002, and DET-NET-001. Phase 3 now adds saved hypothesis-driven hunts, bounded event searches, hunt-run history, durable investigations, analyst notes, evidence pivots, and unified investigation timelines.
 
 The system should grow incrementally from that foundation. Every major component must be testable in isolation and understandable without requiring the full stack to run.
 
