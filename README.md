@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering is next.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering is in progress.
 
 The first production-shaped vertical slice is now implemented:
 
@@ -22,7 +22,7 @@ The first production-shaped vertical slice is now implemented:
 6. query stored telemetry through `GET /api/v1/events`;
 7. verify idempotency and dependency recovery with repeatable smoke/resilience tests.
 
-The next milestone adds deterministic detections and findings on top of this event pipeline.
+Phase 2 now adds deterministic detections and explainable findings on top of this event pipeline; DET-AUTH-001 is the first verified rule.
 
 The system should grow incrementally from that foundation. Every major component must be testable in isolation and understandable without requiring the full stack to run.
 
