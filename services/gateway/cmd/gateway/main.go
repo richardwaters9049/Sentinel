@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,10 +22,12 @@ const (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("configuration error: %v", err)
+		panic(err)
 	}
 
-	logger := log.New(os.Stdout, "sentinel-gateway ", log.LstdFlags|log.LUTC)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: parseLogLevel(cfg.LogLevel),
+	}))
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -37,24 +39,40 @@ func main() {
 	defer stop()
 
 	go func() {
-		logger.Printf("starting address=%s environment=%s log_level=%s", cfg.HTTPAddr, cfg.Environment, cfg.LogLevel)
+		logger.Info("gateway starting",
+			"address", cfg.HTTPAddr,
+			"environment", cfg.Environment,
+		)
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Printf("server failed error=%q", err)
+			logger.Error("gateway server failed", "error", err)
 			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	logger.Print("shutdown requested")
+	logger.Info("gateway shutdown requested")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Printf("shutdown failed error=%q", err)
+		logger.Error("gateway shutdown failed", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Print("stopped")
+	logger.Info("gateway stopped")
+}
+
+func parseLogLevel(value string) slog.Level {
+	switch value {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
