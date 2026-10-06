@@ -278,6 +278,169 @@ func (d *Database) UpdateInvestigationStatus(
 	return d.GetInvestigation(ctx, id)
 }
 
+func (d *Database) AttachHuntRun(
+	ctx context.Context,
+	investigationID string,
+	runID int64,
+	actorID string,
+	requestID string,
+) (InvestigationDetail, error) {
+	if d == nil || d.pool == nil {
+		return InvestigationDetail{}, fmt.Errorf("database is not initialised")
+	}
+
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return InvestigationDetail{}, fmt.Errorf("begin hunt-run attachment transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var investigationExists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM investigations WHERE id = $1)", investigationID).Scan(&investigationExists); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("check investigation: %w", err)
+	}
+	if !investigationExists {
+		return InvestigationDetail{}, ErrInvestigationNotFound
+	}
+
+	var runExists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM hunt_runs WHERE id = $1)", runID).Scan(&runExists); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("check hunt run: %w", err)
+	}
+	if !runExists {
+		return InvestigationDetail{}, ErrHuntRunNotFound
+	}
+
+	commandTag, err := tx.Exec(ctx, `
+		INSERT INTO investigation_events (investigation_id, event_id)
+		SELECT $1, event_id
+		FROM hunt_run_events
+		WHERE hunt_run_id = $2
+		ON CONFLICT DO NOTHING
+	`, investigationID, runID)
+	if err != nil {
+		return InvestigationDetail{}, fmt.Errorf("attach hunt run events: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE investigations SET updated_at = NOW() WHERE id = $1", investigationID); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("touch investigation: %w", err)
+	}
+
+	details, err := json.Marshal(map[string]any{
+		"hunt_run_id":  runID,
+		"events_added": commandTag.RowsAffected(),
+	})
+	if err != nil {
+		return InvestigationDetail{}, fmt.Errorf("marshal hunt-run audit details: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO audit_events (
+			actor_id, action, resource_type, resource_id, request_id, details
+		)
+		VALUES ($1, 'investigation.hunt_run_attached', 'investigation', $2, NULLIF($3, ''), $4)
+	`, actorID, investigationID, requestID, details); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("insert hunt-run attachment audit: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("commit hunt-run attachment: %w", err)
+	}
+	return d.GetInvestigation(ctx, investigationID)
+}
+
+func (d *Database) UpdateInvestigationMetadata(
+	ctx context.Context,
+	id string,
+	ownerID *string,
+	priority *string,
+	actorID string,
+	requestID string,
+) (InvestigationDetail, error) {
+	if d == nil || d.pool == nil {
+		return InvestigationDetail{}, fmt.Errorf("database is not initialised")
+	}
+	if ownerID == nil && priority == nil {
+		return InvestigationDetail{}, investigation.ErrInvalidInvestigation
+	}
+
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return InvestigationDetail{}, fmt.Errorf("begin investigation metadata transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var (
+		currentOwner    *string
+		currentPriority string
+	)
+	if err := tx.QueryRow(ctx, `
+		SELECT owner_id, priority
+		FROM investigations
+		WHERE id = $1
+		FOR UPDATE
+	`, id).Scan(&currentOwner, &currentPriority); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return InvestigationDetail{}, ErrInvestigationNotFound
+		}
+		return InvestigationDetail{}, fmt.Errorf("query investigation metadata: %w", err)
+	}
+
+	nextOwner := currentOwner
+	nextPriority := currentPriority
+	if ownerID != nil {
+		value := strings.TrimSpace(*ownerID)
+		if value == "" {
+			nextOwner = nil
+		} else {
+			nextOwner = &value
+		}
+	}
+	if priority != nil {
+		value := strings.ToLower(strings.TrimSpace(*priority))
+		if err := investigation.ValidateCreate("metadata-update", value); err != nil {
+			return InvestigationDetail{}, err
+		}
+		nextPriority = value
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE investigations
+		SET owner_id = $2, priority = $3, updated_at = NOW()
+		WHERE id = $1
+	`, id, nextOwner, nextPriority); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("update investigation metadata: %w", err)
+	}
+
+	details, err := json.Marshal(map[string]any{
+		"owner_id": map[string]any{
+			"from": currentOwner,
+			"to":   nextOwner,
+		},
+		"priority": map[string]string{
+			"from": currentPriority,
+			"to":   nextPriority,
+		},
+	})
+	if err != nil {
+		return InvestigationDetail{}, fmt.Errorf("marshal investigation metadata audit: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO audit_events (
+			actor_id, action, resource_type, resource_id, request_id, details
+		)
+		VALUES ($1, 'investigation.metadata_changed', 'investigation', $2, NULLIF($3, ''), $4)
+	`, actorID, id, requestID, details); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("insert investigation metadata audit: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return InvestigationDetail{}, fmt.Errorf("commit investigation metadata transaction: %w", err)
+	}
+	return d.GetInvestigation(ctx, id)
+}
+
 func uniqueNonEmpty(values []string) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))

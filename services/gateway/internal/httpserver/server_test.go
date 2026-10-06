@@ -189,6 +189,82 @@ func (s *stubFindingReader) UpdateInvestigationStatus(
 	return database.InvestigationDetail{}, s.err
 }
 
+func (s *stubFindingReader) ListHuntRuns(
+	context.Context,
+	string,
+	int,
+) ([]hunting.RunRecord, error) {
+	return []hunting.RunRecord{}, s.err
+}
+
+func (s *stubFindingReader) HuntRunEvents(context.Context, int64) ([]database.EventEvidenceRecord, error) {
+	return []database.EventEvidenceRecord{}, s.err
+}
+
+func (s *stubFindingReader) GetAssetPivot(
+	context.Context,
+	string,
+	int,
+) (database.AssetPivot, error) {
+	return database.AssetPivot{}, s.err
+}
+
+func (s *stubFindingReader) GetIdentityPivot(
+	context.Context,
+	string,
+	int,
+) (database.IdentityPivot, error) {
+	return database.IdentityPivot{}, s.err
+}
+
+func (s *stubFindingReader) AttachHuntRun(
+	context.Context,
+	string,
+	int64,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) UpdateInvestigationMetadata(
+	context.Context,
+	string,
+	*string,
+	*string,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) UpdateHunt(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+	hunting.Query,
+	string,
+) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) ListHuntVersions(
+	context.Context,
+	string,
+) ([]hunting.VersionRecord, error) {
+	return []hunting.VersionRecord{}, s.err
+}
+
+func (s *stubFindingReader) HuntMetrics(context.Context) (database.HuntMetricsSummary, error) {
+	return database.HuntMetricsSummary{}, s.err
+}
+
+func (s *stubFindingReader) InvestigationMetrics(context.Context) (database.InvestigationMetricsSummary, error) {
+	return database.InvestigationMetricsSummary{}, s.err
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
 

@@ -2,11 +2,13 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-3-threat-hunting
 ```
+
+Phase 3 now includes saved and versioned hunts, bounded multi-field/temporal queries, durable hunt-run history, asset/identity pivots, investigation cases, exact hunt-result attachment, ownership/priority management, analyst notes, audit history, unified timelines, workflow metrics, and a complete regression suite.
 
 ## Goal
 
@@ -167,20 +169,233 @@ The initial Phase 3 smoke test:
 8. moves the investigation from `open` to `investigating`;
 9. verifies findings, events, notes, audit records, and the unified timeline.
 
+## Analyst pivots
+
+Phase 3 now supports direct pivots from an asset or identity into its recent telemetry and related findings.
+
+```http
+GET /api/v1/assets/{id}/pivot?limit=50
+GET /api/v1/identities/{id}/pivot?limit=50
+```
+
+Each pivot returns the entity metadata plus:
+
+- recent events;
+- findings linked through those events.
+
+The result limit is bounded from 1 to 200.
+
+## Hunt-run history
+
+Every hunt execution now receives a durable run ID and stores the exact event IDs returned by that run.
+
+```http
+GET /api/v1/hunts/{id}/runs
+```
+
+This means a later investigation can reference the exact historical result set rather than re-running a query against changed telemetry.
+
+The new `hunt_run_events` relationship preserves this membership explicitly.
+
+## Investigation enrichment
+
+An existing investigation can attach the exact events from a previous hunt run:
+
+```http
+POST /api/v1/investigations/{id}/hunt-runs/{run_id}
+```
+
+This operation is idempotent at the event-link level and creates an append-only audit event recording the run ID and number of newly attached events.
+
+Investigation ownership and priority can also be updated:
+
+```http
+PATCH /api/v1/investigations/{id}
+```
+
+Supported fields are:
+
+- `owner_id`;
+- `priority`.
+
+Setting `owner_id` to an empty string clears the owner. Priority remains constrained to `low`, `medium`, `high`, or `critical`.
+
+Metadata changes are audited transactionally.
+
+## Verification
+
+The Phase 3 pivot smoke test verifies:
+
+- durable hunt-run IDs;
+- exact hunt-run event membership;
+- hunt-run history retrieval;
+- asset pivots;
+- identity pivots;
+- attaching hunt-run results to an investigation;
+- ownership changes;
+- priority changes;
+- audit records for investigation enrichment.
+
+Run it with:
+
+```bash
+make pivots-phase3
+```
+
+## Hunt editing and version history
+
+Saved hunts can now be edited without losing their previous definitions.
+
+```http
+PATCH /api/v1/hunts/{id}
+GET   /api/v1/hunts/{id}/versions
+```
+
+Every successful edit:
+
+- increments the hunt version;
+- updates the current definition;
+- appends an immutable `hunt_versions` record;
+- preserves who made the change and when.
+
+Existing hunts are backfilled into version 1 when the migration is applied.
+
+This means hunt tuning remains reviewable instead of silently rewriting analyst intent.
+
+## Richer hunt operators
+
+The typed hunt model now supports both single-value and bounded multi-value filters.
+
+Additional operators include:
+
+- categories;
+- actions;
+- outcomes;
+- destination IP;
+- source zones;
+- destination zones;
+- destination ports;
+- exact label matches;
+- relative time through `last_minutes`.
+
+Example:
+
+```json
+{
+  "categories": ["authentication", "network"],
+  "outcomes": ["success"],
+  "source_zones": ["corporate"],
+  "destination_ports": [22, 443],
+  "labels": {
+    "environment": "lab"
+  },
+  "last_minutes": 60,
+  "limit": 100
+}
+```
+
+Multi-value fields use OR semantics within the field and AND semantics across different fields.
+
+Relative time is deliberately incompatible with absolute `from`/`to` bounds in one query. This keeps the effective temporal window explicit.
+
+Safety limits include:
+
+- maximum 500 results;
+- maximum 20 values for most multi-value fields;
+- maximum 50 destination ports;
+- maximum 20 label predicates;
+- maximum relative window of seven days.
+
+## Hunt and investigation metrics
+
+Phase 3 now exposes operational metrics for the analyst workflow.
+
+```http
+GET /api/v1/hunts/metrics
+GET /api/v1/investigations/metrics
+```
+
+Hunt metrics include:
+
+- hunt count;
+- total executions;
+- total results;
+- per-hunt run count;
+- per-hunt total and average result count;
+- current hunt version;
+- last-run timestamp.
+
+Investigation metrics include:
+
+- total investigations;
+- unassigned investigations;
+- counts by status;
+- counts by priority;
+- oldest currently open investigation timestamp;
+- latest investigation update timestamp.
+
+These metrics are derived directly from persisted workflow data and are intended for transparent operational visibility rather than opaque scoring.
+
+## Hunt-maturity verification
+
+Run:
+
+```bash
+make maturity-phase3
+```
+
+The test verifies:
+
+- version-one hunt creation;
+- edit to version two;
+- append-only version history;
+- multi-value filtering;
+- destination-port filtering;
+- label filtering;
+- relative-time filtering;
+- hunt metrics;
+- investigation metrics.
+
+## Final Phase 3 resilience and regression pass
+
+The final Phase 3 regression command is:
+
+```bash
+make final-phase3
+```
+
+It verifies the complete Sentinel backend baseline through Phase 3:
+
+1. formatting, vet, unit tests, and Go race detection;
+2. the complete Phase 2 regression baseline, including dependency resilience;
+3. saved hunts and hypothesis/query persistence;
+4. hunt execution and durable run history;
+5. investigation creation, notes, workflow, audit, and unified timelines;
+6. asset and identity pivots;
+7. exact hunt-run result attachment;
+8. investigation ownership and priority updates;
+9. append-only hunt versioning;
+10. richer bounded hunt operators;
+11. hunt and investigation metrics.
+
+Phase 3 reuses the complete Phase 2 regression because threat hunting and investigations depend on the same event, detection, evidence, and resilience guarantees.
+
 ## Phase 3 roadmap
 
 The first slice deliberately focuses on durable analyst primitives.
 
 Next work should add:
 
-- asset and identity pivot endpoints;
-- hunt-run listing/history;
-- attaching additional hunt results to an existing investigation;
-- investigation ownership changes;
-- investigation priority changes;
-- saved hunt editing/versioning;
-- richer temporal and multi-field hunt operators;
-- investigation/hunt metrics;
-- final Phase 3 resilience and regression testing.
+- [x] asset and identity pivot endpoints;
+- [x] hunt-run listing/history;
+- [x] attaching additional hunt results to an existing investigation;
+- [x] investigation ownership changes;
+- [x] investigation priority changes;
+- [x] saved hunt editing/versioning;
+- [x] richer temporal and multi-field hunt operators;
+- [x] investigation/hunt metrics;
+- [x] final Phase 3 resilience and regression testing.
+
+Phase 3 is complete.
 
 The web analyst console should consume these stable APIs rather than invent its own investigation state.
