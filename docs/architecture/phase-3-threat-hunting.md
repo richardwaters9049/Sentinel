@@ -240,6 +240,120 @@ Run it with:
 make pivots-phase3
 ```
 
+## Hunt editing and version history
+
+Saved hunts can now be edited without losing their previous definitions.
+
+```http
+PATCH /api/v1/hunts/{id}
+GET   /api/v1/hunts/{id}/versions
+```
+
+Every successful edit:
+
+- increments the hunt version;
+- updates the current definition;
+- appends an immutable `hunt_versions` record;
+- preserves who made the change and when.
+
+Existing hunts are backfilled into version 1 when the migration is applied.
+
+This means hunt tuning remains reviewable instead of silently rewriting analyst intent.
+
+## Richer hunt operators
+
+The typed hunt model now supports both single-value and bounded multi-value filters.
+
+Additional operators include:
+
+- categories;
+- actions;
+- outcomes;
+- destination IP;
+- source zones;
+- destination zones;
+- destination ports;
+- exact label matches;
+- relative time through `last_minutes`.
+
+Example:
+
+```json
+{
+  "categories": ["authentication", "network"],
+  "outcomes": ["success"],
+  "source_zones": ["corporate"],
+  "destination_ports": [22, 443],
+  "labels": {
+    "environment": "lab"
+  },
+  "last_minutes": 60,
+  "limit": 100
+}
+```
+
+Multi-value fields use OR semantics within the field and AND semantics across different fields.
+
+Relative time is deliberately incompatible with absolute `from`/`to` bounds in one query. This keeps the effective temporal window explicit.
+
+Safety limits include:
+
+- maximum 500 results;
+- maximum 20 values for most multi-value fields;
+- maximum 50 destination ports;
+- maximum 20 label predicates;
+- maximum relative window of seven days.
+
+## Hunt and investigation metrics
+
+Phase 3 now exposes operational metrics for the analyst workflow.
+
+```http
+GET /api/v1/hunts/metrics
+GET /api/v1/investigations/metrics
+```
+
+Hunt metrics include:
+
+- hunt count;
+- total executions;
+- total results;
+- per-hunt run count;
+- per-hunt total and average result count;
+- current hunt version;
+- last-run timestamp.
+
+Investigation metrics include:
+
+- total investigations;
+- unassigned investigations;
+- counts by status;
+- counts by priority;
+- oldest currently open investigation timestamp;
+- latest investigation update timestamp.
+
+These metrics are derived directly from persisted workflow data and are intended for transparent operational visibility rather than opaque scoring.
+
+## Hunt-maturity verification
+
+Run:
+
+```bash
+make maturity-phase3
+```
+
+The test verifies:
+
+- version-one hunt creation;
+- edit to version two;
+- append-only version history;
+- multi-value filtering;
+- destination-port filtering;
+- label filtering;
+- relative-time filtering;
+- hunt metrics;
+- investigation metrics.
+
 ## Phase 3 roadmap
 
 The first slice deliberately focuses on durable analyst primitives.
@@ -251,9 +365,9 @@ Next work should add:
 - [x] attaching additional hunt results to an existing investigation;
 - [x] investigation ownership changes;
 - [x] investigation priority changes;
-- [ ] saved hunt editing/versioning;
-- [ ] richer temporal and multi-field hunt operators;
-- [ ] investigation/hunt metrics;
+- [x] saved hunt editing/versioning;
+- [x] richer temporal and multi-field hunt operators;
+- [x] investigation/hunt metrics;
 - [ ] final Phase 3 resilience and regression testing.
 
 The web analyst console should consume these stable APIs rather than invent its own investigation state.

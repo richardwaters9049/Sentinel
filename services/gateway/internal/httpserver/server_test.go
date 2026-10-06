@@ -238,6 +238,33 @@ func (s *stubFindingReader) UpdateInvestigationMetadata(
 	return database.InvestigationDetail{}, s.err
 }
 
+func (s *stubFindingReader) UpdateHunt(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+	hunting.Query,
+	string,
+) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) ListHuntVersions(
+	context.Context,
+	string,
+) ([]hunting.VersionRecord, error) {
+	return []hunting.VersionRecord{}, s.err
+}
+
+func (s *stubFindingReader) HuntMetrics(context.Context) (database.HuntMetricsSummary, error) {
+	return database.HuntMetricsSummary{}, s.err
+}
+
+func (s *stubFindingReader) InvestigationMetrics(context.Context) (database.InvestigationMetricsSummary, error) {
+	return database.InvestigationMetricsSummary{}, s.err
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
 

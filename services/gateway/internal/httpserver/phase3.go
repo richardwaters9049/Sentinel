@@ -91,6 +91,89 @@ func (s *Server) handleHuntDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, hunt)
 }
 
+func (s *Server) handleUpdateHunt(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "hunts_unavailable", "hunt storage is unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	var request struct {
+		Name        string        `json:"name"`
+		Description string        `json:"description"`
+		Hypothesis  string        `json:"hypothesis"`
+		Query       hunting.Query `json:"query"`
+	}
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	hunt, err := s.analyst.UpdateHunt(
+		r.Context(),
+		strings.TrimSpace(r.PathValue("id")),
+		request.Name,
+		request.Description,
+		request.Hypothesis,
+		request.Query,
+		actorID,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, database.ErrHuntNotFound):
+			writeAPIError(w, http.StatusNotFound, "hunt_not_found", "hunt was not found")
+		case errors.Is(err, hunting.ErrInvalidHunt):
+			writeAPIError(w, http.StatusBadRequest, "invalid_hunt", "hunt definition is invalid")
+		default:
+			writeAPIError(w, http.StatusServiceUnavailable, "update_failed", "hunt could not be updated")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, hunt)
+}
+
+func (s *Server) handleHuntVersions(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "hunts_unavailable", "hunt storage is unavailable")
+		return
+	}
+
+	versions, err := s.analyst.ListHuntVersions(r.Context(), strings.TrimSpace(r.PathValue("id")))
+	if err != nil {
+		if errors.Is(err, database.ErrHuntNotFound) {
+			writeAPIError(w, http.StatusNotFound, "hunt_not_found", "hunt was not found")
+			return
+		}
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "hunt versions could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":    len(versions),
+		"versions": versions,
+	})
+}
+
+func (s *Server) handleHuntMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "hunts_unavailable", "hunt storage is unavailable")
+		return
+	}
+
+	metrics, err := s.analyst.HuntMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "hunt metrics could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
+}
+
 func (s *Server) handleRunHunt(w http.ResponseWriter, r *http.Request) {
 	if s.analyst == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "hunts_unavailable", "hunt storage is unavailable")
@@ -224,6 +307,20 @@ func parsePivotLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 		limit = value
 	}
 	return limit, true
+}
+
+func (s *Server) handleInvestigationMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.analyst == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "investigations_unavailable", "investigation storage is unavailable")
+		return
+	}
+
+	metrics, err := s.analyst.InvestigationMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "investigation metrics could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
 }
 
 func (s *Server) handleInvestigations(w http.ResponseWriter, r *http.Request) {
