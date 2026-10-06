@@ -14,6 +14,7 @@ import (
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/httpserver"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/messaging"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
 
 func main() {
@@ -51,6 +52,26 @@ func main() {
 	}
 	defer natsClient.Close()
 
+	telemetryService := telemetry.NewService(natsClient)
+	persistenceHandler := telemetry.PersistenceHandler(db)
+
+	subscription, err := natsClient.StartTelemetryConsumer(
+		ctx,
+		persistenceHandler,
+		func(err error) {
+			logger.Warn("telemetry consumer issue", "error", err)
+		},
+	)
+	if err != nil {
+		logger.Error("telemetry persistence consumer failed to start", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := subscription.Unsubscribe(); err != nil {
+			logger.Warn("telemetry subscription cleanup failed", "error", err)
+		}
+	}()
+
 	readinessChecker := readiness.New(cfg.DependencyTimeout, map[string]readiness.CheckFunc{
 		"postgres": db.Ping,
 		"nats":     natsClient.Ping,
@@ -58,7 +79,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.New(readinessChecker).Handler(),
+		Handler:           httpserver.New(readinessChecker, telemetryService, db).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
@@ -68,6 +89,7 @@ func main() {
 		logger.Info("gateway starting",
 			"address", cfg.HTTPAddr,
 			"environment", cfg.Environment,
+			"telemetry_subject", messaging.TelemetrySubject,
 		)
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

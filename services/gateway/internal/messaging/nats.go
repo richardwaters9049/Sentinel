@@ -2,11 +2,25 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
+
+const (
+	TelemetryStream       = "SENTINEL_TELEMETRY"
+	TelemetrySubject      = "sentinel.telemetry.v1"
+	TelemetryStoreDurable = "sentinel-event-store-workers-v1"
+)
+
+type TelemetryHandler func(context.Context, []byte) error
+type TelemetryErrorHandler func(error)
+
+type permanentFailure interface {
+	Permanent() bool
+}
 
 type NATS struct {
 	conn *nats.Conn
@@ -22,8 +36,8 @@ func Connect(ctx context.Context, url string, timeout time.Duration) (*NATS, err
 		url,
 		nats.Name("sentinel-gateway"),
 		nats.Timeout(timeout),
-		nats.MaxReconnects(3),
-		nats.ReconnectWait(500*time.Millisecond),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to NATS: %w", err)
@@ -55,7 +69,132 @@ func Connect(ctx context.Context, url string, timeout time.Duration) (*NATS, err
 		}
 	}
 
-	return &NATS{conn: conn, js: js}, nil
+	client := &NATS{conn: conn, js: js}
+	if err := client.ensureTelemetryStream(); err != nil {
+		client.Close()
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (n *NATS) ensureTelemetryStream() error {
+	config := &nats.StreamConfig{
+		Name:        TelemetryStream,
+		Description: "Normalised Sentinel security telemetry",
+		Subjects:    []string{TelemetrySubject},
+		Retention:   nats.LimitsPolicy,
+		Storage:     nats.FileStorage,
+		Discard:     nats.DiscardOld,
+		MaxAge:      24 * time.Hour,
+		Duplicates:  2 * time.Minute,
+	}
+
+	info, err := n.js.StreamInfo(TelemetryStream)
+	if err != nil {
+		if err == nats.ErrStreamNotFound {
+			if _, addErr := n.js.AddStream(config); addErr != nil {
+				return fmt.Errorf("create telemetry stream: %w", addErr)
+			}
+			return nil
+		}
+		return fmt.Errorf("inspect telemetry stream: %w", err)
+	}
+
+	config.MaxMsgs = info.Config.MaxMsgs
+	config.MaxBytes = info.Config.MaxBytes
+	config.MaxMsgSize = info.Config.MaxMsgSize
+	config.Replicas = info.Config.Replicas
+
+	if _, err := n.js.UpdateStream(config); err != nil {
+		return fmt.Errorf("update telemetry stream: %w", err)
+	}
+
+	return nil
+}
+
+func (n *NATS) PublishTelemetry(ctx context.Context, eventID string, payload []byte) error {
+	if n == nil || n.conn == nil || n.js == nil {
+		return fmt.Errorf("NATS is not initialised")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	ack, err := n.js.Publish(
+		TelemetrySubject,
+		payload,
+		nats.MsgId(eventID),
+	)
+	if err != nil {
+		return fmt.Errorf("publish telemetry: %w", err)
+	}
+	if ack.Stream != TelemetryStream {
+		return fmt.Errorf("publish telemetry: unexpected stream %q", ack.Stream)
+	}
+
+	return nil
+}
+
+func (n *NATS) StartTelemetryConsumer(
+	ctx context.Context,
+	handler TelemetryHandler,
+	onError TelemetryErrorHandler,
+) (*nats.Subscription, error) {
+	if n == nil || n.conn == nil || n.js == nil {
+		return nil, fmt.Errorf("NATS is not initialised")
+	}
+	if handler == nil {
+		return nil, fmt.Errorf("telemetry handler is required")
+	}
+
+	notifyError := func(err error) {
+		if err != nil && onError != nil {
+			onError(err)
+		}
+	}
+
+	subscription, err := n.js.QueueSubscribe(
+		TelemetrySubject,
+		"sentinel-event-store-workers",
+		func(message *nats.Msg) {
+			if ctx.Err() != nil {
+				notifyError(message.Nak())
+				return
+			}
+
+			handlerCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := handler(handlerCtx, message.Data)
+			cancel()
+
+			if err != nil {
+				notifyError(err)
+
+				var permanent permanentFailure
+				if errors.As(err, &permanent) && permanent.Permanent() {
+					notifyError(message.Term())
+					return
+				}
+
+				notifyError(message.NakWithDelay(time.Second))
+				return
+			}
+
+			notifyError(message.Ack())
+		},
+		nats.Durable(TelemetryStoreDurable),
+		nats.ManualAck(),
+		nats.AckExplicit(),
+		nats.AckWait(15*time.Second),
+		nats.MaxDeliver(-1),
+		nats.DeliverNew(),
+		nats.BindStream(TelemetryStream),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("start telemetry consumer: %w", err)
+	}
+
+	return subscription, nil
 }
 
 func (n *NATS) Ping(ctx context.Context) error {
@@ -76,10 +215,6 @@ func (n *NATS) Ping(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (n *NATS) JetStream() nats.JetStreamContext {
-	return n.js
 }
 
 func (n *NATS) Close() {
