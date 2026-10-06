@@ -4,16 +4,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 )
 
 const maxRequestBodyBytes int64 = 1 << 20
 
 type Server struct {
-	mux *http.ServeMux
+	mux       *http.ServeMux
+	readiness *readiness.Checker
 }
 
-func New() *Server {
-	s := &Server{mux: http.NewServeMux()}
+func New(readinessChecker *readiness.Checker) *Server {
+	s := &Server{
+		mux:       http.NewServeMux(),
+		readiness: readinessChecker,
+	}
 	s.routes()
 	return s
 }
@@ -35,10 +41,28 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ready",
-		"service": "gateway",
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if s.readiness == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"status": "not_ready",
+			"ready":  false,
+		})
+		return
+	}
+
+	result := s.readiness.Check(r.Context())
+	status := http.StatusOK
+	statusText := "ready"
+
+	if !result.Ready {
+		status = http.StatusServiceUnavailable
+		statusText = "not_ready"
+	}
+
+	writeJSON(w, status, map[string]interface{}{
+		"status":       statusText,
+		"ready":        result.Ready,
+		"dependencies": result.Dependencies,
 	})
 }
 

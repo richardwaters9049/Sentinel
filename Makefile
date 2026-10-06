@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet test fmt check
+.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet test fmt check smoke
 
 help:
 	@echo "Sentinel development commands"
@@ -10,7 +10,8 @@ help:
 	@echo "  make gateway-vet   Run go vet for the gateway"
 	@echo "  make test          Run all current tests"
 	@echo "  make fmt           Format Go code"
-	@echo "  make check         Format check, vet, and test"
+	@echo "  make check         Format check, vet, test, and race test"
+	@echo "  make smoke         Run the Phase 0 local smoke test"
 
 dev-up:
 	docker compose up -d
@@ -39,3 +40,7 @@ check:
 	cd services/gateway && test -z "$$(gofmt -l .)"
 	$(MAKE) gateway-vet
 	$(MAKE) test
+	cd services/gateway && go test -race ./...
+
+smoke:
+	./scripts/phase0-smoke.sh
