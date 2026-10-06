@@ -10,6 +10,8 @@ import (
 )
 
 type fakeRepository struct {
+	enabled       bool
+	enabledErr    error
 	failures      []AuthFailure
 	queryErr      error
 	createErr     error
@@ -19,6 +21,16 @@ type fakeRepository struct {
 	queryBefore   time.Time
 	queryWindow   time.Duration
 	queryLimit    int
+}
+
+func (f *fakeRepository) IsDetectionEnabled(context.Context, string) (bool, error) {
+	if f.enabledErr != nil {
+		return false, f.enabledErr
+	}
+	if !f.enabled {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (f *fakeRepository) RecentAuthenticationFailures(
@@ -50,6 +62,7 @@ func TestProcessCreatesAuthBurstFinding(t *testing.T) {
 
 	successTime := time.Date(2026, 10, 6, 22, 10, 0, 0, time.UTC)
 	repo := &fakeRepository{
+		enabled: true,
 		failures: []AuthFailure{
 			{EventID: "evt_fail_4", Timestamp: successTime.Add(-20 * time.Second)},
 			{EventID: "evt_fail_2", Timestamp: successTime.Add(-40 * time.Second)},
@@ -96,7 +109,7 @@ func TestProcessCreatesAuthBurstFinding(t *testing.T) {
 func TestProcessIgnoresNonSuccessfulLogin(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeRepository{}
+	repo := &fakeRepository{enabled: true}
 	engine := New(repo)
 
 	event := successfulLogin(time.Now().UTC())
@@ -115,6 +128,7 @@ func TestProcessRequiresThreshold(t *testing.T) {
 
 	now := time.Now().UTC()
 	repo := &fakeRepository{
+		enabled: true,
 		failures: []AuthFailure{
 			{EventID: "evt_1", Timestamp: now.Add(-time.Minute)},
 			{EventID: "evt_2", Timestamp: now.Add(-45 * time.Second)},
@@ -133,7 +147,7 @@ func TestProcessRequiresThreshold(t *testing.T) {
 func TestProcessSkipsMissingCorrelationContext(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeRepository{}
+	repo := &fakeRepository{enabled: true}
 	engine := New(repo)
 	event := successfulLogin(time.Now().UTC())
 	event.Network = nil
@@ -146,10 +160,36 @@ func TestProcessSkipsMissingCorrelationContext(t *testing.T) {
 	}
 }
 
+func TestProcessSkipsDisabledDetection(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{enabled: false}
+	err := New(repo).Process(context.Background(), successfulLogin(time.Now().UTC()))
+	if err != nil {
+		t.Fatalf("expected disabled detection to be skipped, got %v", err)
+	}
+	if len(repo.created) != 0 {
+		t.Fatalf("expected no findings while detection disabled, got %d", len(repo.created))
+	}
+	if repo.queryLimit != 0 {
+		t.Fatalf("disabled detection should not query historical failures")
+	}
+}
+
+func TestProcessReturnsDetectionStateFailure(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{enabledErr: errors.New("detection registry unavailable")}
+	err := New(repo).Process(context.Background(), successfulLogin(time.Now().UTC()))
+	if err == nil {
+		t.Fatal("expected detection state error")
+	}
+}
+
 func TestProcessPropagatesRepositoryErrors(t *testing.T) {
 	t.Parallel()
 
-	repo := &fakeRepository{queryErr: errors.New("database unavailable")}
+	repo := &fakeRepository{enabled: true, queryErr: errors.New("database unavailable")}
 	err := New(repo).Process(context.Background(), successfulLogin(time.Now().UTC()))
 	if err == nil {
 		t.Fatal("expected query error")

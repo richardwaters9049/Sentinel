@@ -18,6 +18,7 @@ const (
 )
 
 type Repository interface {
+	IsDetectionEnabled(context.Context, string) (bool, error)
 	RecentAuthenticationFailures(
 		context.Context,
 		string,
@@ -43,6 +44,14 @@ func (e *Engine) Process(ctx context.Context, event telemetry.Event) error {
 	}
 
 	if !isSuccessfulLogin(event) {
+		return nil
+	}
+
+	enabled, err := e.repository.IsDetectionEnabled(ctx, AuthBurstDetectionID)
+	if err != nil {
+		return fmt.Errorf("check detection state: %w", err)
+	}
+	if !enabled {
 		return nil
 	}
 

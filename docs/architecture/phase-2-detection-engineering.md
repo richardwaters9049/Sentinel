@@ -162,12 +162,12 @@ The remaining Phase 2 work should build on the current engine rather than adding
 
 Planned work:
 
-- finding detail endpoint;
-- finding workflow/status transitions;
-- append-only audit records for analyst actions;
-- detection enable/disable state;
-- detection metadata/query API;
-- additional deterministic rules;
+- [x] finding detail endpoint;
+- [x] finding workflow/status transitions;
+- [x] append-only audit records for analyst actions;
+- [x] detection enable/disable state;
+- [x] detection metadata/query API;
+- [ ] additional deterministic rules;
 - negative scenario fixtures;
 - multi-detection regression suite;
 - detection quality metrics;
