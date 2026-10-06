@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -33,6 +35,15 @@ type AnalystStore interface {
 	ListDetections(context.Context) ([]database.DetectionRecord, error)
 	DetectionMetrics(context.Context) ([]database.DetectionMetrics, error)
 	SetDetectionEnabled(context.Context, string, bool, string, string) (database.DetectionRecord, error)
+	CreateHunt(context.Context, string, string, string, hunting.Query, string) (hunting.Definition, error)
+	ListHunts(context.Context) ([]hunting.Definition, error)
+	GetHunt(context.Context, string) (hunting.Definition, error)
+	RunHunt(context.Context, string, string, hunting.Query) (hunting.RunResult, error)
+	CreateInvestigation(context.Context, database.InvestigationCreateInput) (database.InvestigationDetail, error)
+	ListInvestigations(context.Context, string, int) ([]investigation.Record, error)
+	GetInvestigation(context.Context, string) (database.InvestigationDetail, error)
+	AddInvestigationNote(context.Context, string, string, string, string) (database.InvestigationDetail, error)
+	UpdateInvestigationStatus(context.Context, string, string, string, string) (database.InvestigationDetail, error)
 }
 
 type Server struct {
@@ -76,6 +87,15 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
 	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
 	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
+	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
+	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
+	s.mux.HandleFunc("GET /api/v1/hunts/{id}", s.handleHuntDetail)
+	s.mux.HandleFunc("POST /api/v1/hunts/{id}/run", s.handleRunHunt)
+	s.mux.HandleFunc("GET /api/v1/investigations", s.handleInvestigations)
+	s.mux.HandleFunc("POST /api/v1/investigations", s.handleCreateInvestigation)
+	s.mux.HandleFunc("GET /api/v1/investigations/{id}", s.handleInvestigationDetail)
+	s.mux.HandleFunc("POST /api/v1/investigations/{id}/notes", s.handleInvestigationNote)
+	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}/status", s.handleInvestigationStatus)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

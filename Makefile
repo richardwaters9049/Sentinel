@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2
+.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3
 
 help:
 	@echo "Sentinel development commands"
@@ -21,6 +21,7 @@ help:
 	@echo "  make catalogue-phase2 Run multi-detection catalogue checks"
 	@echo "  make quality-phase2   Run quality metrics/evidence checks"
 	@echo "  make final-phase2     Run the complete Phase 2 regression suite"
+	@echo "  make smoke-phase3     Run the Phase 3 hunting/investigation vertical slice"
 
 dev-up:
 	docker compose up -d
@@ -83,3 +84,6 @@ quality-phase2:
 
 final-phase2:
 	./scripts/phase2-final-regression.sh
+
+smoke-phase3:
+	./scripts/phase3-smoke.sh

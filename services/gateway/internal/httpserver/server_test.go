@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -123,6 +125,68 @@ func (s *stubFindingReader) SetDetectionEnabled(
 		return database.DetectionRecord{}, s.err
 	}
 	return database.DetectionRecord{ID: id, Enabled: enabled}, nil
+}
+
+func (s *stubFindingReader) CreateHunt(
+	context.Context,
+	string,
+	string,
+	string,
+	hunting.Query,
+	string,
+) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) ListHunts(context.Context) ([]hunting.Definition, error) {
+	return []hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) GetHunt(context.Context, string) (hunting.Definition, error) {
+	return hunting.Definition{}, s.err
+}
+
+func (s *stubFindingReader) RunHunt(context.Context, string, string, hunting.Query) (hunting.RunResult, error) {
+	return hunting.RunResult{}, s.err
+}
+
+func (s *stubFindingReader) CreateInvestigation(
+	context.Context,
+	database.InvestigationCreateInput,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) ListInvestigations(
+	context.Context,
+	string,
+	int,
+) ([]investigation.Record, error) {
+	return []investigation.Record{}, s.err
+}
+
+func (s *stubFindingReader) GetInvestigation(context.Context, string) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) AddInvestigationNote(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
+}
+
+func (s *stubFindingReader) UpdateInvestigationStatus(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+) (database.InvestigationDetail, error) {
+	return database.InvestigationDetail{}, s.err
 }
 
 func TestHealth(t *testing.T) {
