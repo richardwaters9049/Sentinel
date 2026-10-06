@@ -36,6 +36,7 @@ func TestNormalizeCreatesCanonicalEvent(t *testing.T) {
 			SourceIP:        "10.0.0.10",
 			DestinationIP:   "10.0.0.20",
 			DestinationPort: 443,
+			DestinationZone: " OT ",
 			Protocol:        " TCP ",
 		},
 		Labels: map[string]string{
@@ -68,6 +69,9 @@ func TestNormalizeCreatesCanonicalEvent(t *testing.T) {
 	}
 	if event.Network == nil || event.Network.Protocol != "tcp" {
 		t.Fatalf("expected normalized network protocol, got %#v", event.Network)
+	}
+	if event.Network.DestinationZone != "ot" {
+		t.Fatalf("expected normalized destination zone, got %#v", event.Network)
 	}
 	if event.Labels["scenario"] != "auth-demo" {
 		t.Fatalf("expected normalized label, got %#v", event.Labels)

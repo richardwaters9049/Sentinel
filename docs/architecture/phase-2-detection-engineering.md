@@ -8,7 +8,7 @@ In progress on:
 feat/phase-2-detection-engineering
 ```
 
-The first deterministic detection vertical slice is implemented and verified.
+The multi-detection framework, analyst workflow, and first three deterministic detections are implemented and verified.
 
 ## Goal
 
@@ -72,6 +72,55 @@ Stored metadata includes:
 - enabled state;
 - structured rule definition;
 - MITRE ATT&CK context.
+
+## Multi-detection engine
+
+The detection engine now operates over a registry of independent rule implementations rather than one hard-coded detector.
+
+Each rule:
+
+- exposes a stable detection ID;
+- evaluates one normalised event;
+- may query bounded historical context when required;
+- returns either no match or one explainable finding;
+- is checked against persisted enabled/disabled state before evaluation.
+
+The current registry contains:
+
+```text
+DET-AUTH-001  Repeated Authentication Failures Followed by Success
+DET-AUTH-002  Interactive Login Using a Service Account
+DET-NET-001   Unexpected Corporate-to-OT Network Connection
+```
+
+This allows stateless single-event detections and stateful temporal detections to coexist behind the same engine contract.
+
+### DET-AUTH-002
+
+`DET-AUTH-002` detects a successful interactive login where `actor.type` is `service_account`.
+
+It is a single-event rule and does not require a historical query.
+
+### DET-NET-001
+
+`DET-NET-001` detects a `network/connection` event where:
+
+```text
+source asset zone      = corporate
+destination network zone = ot
+```
+
+The telemetry contract now carries an optional `network.destination_zone` field to support explicit boundary-aware reasoning.
+
+No ATT&CK technique is assigned to this rule yet because a zone-crossing connection alone is not sufficient evidence for a specific adversary technique.
+
+### Runtime control
+
+Every rule checks its persisted detection state before evaluation.
+
+Disabling one rule does not disable unrelated detections.
+
+The engine regression suite verifies independent per-rule enable state and prevents an unrelated rule from invoking unnecessary historical correlation queries.
 
 ## Correlation
 
@@ -167,11 +216,11 @@ Planned work:
 - [x] append-only audit records for analyst actions;
 - [x] detection enable/disable state;
 - [x] detection metadata/query API;
-- [ ] additional deterministic rules;
-- negative scenario fixtures;
-- multi-detection regression suite;
-- detection quality metrics;
-- richer evidence retrieval;
-- final Phase 2 resilience and regression testing.
+- [x] additional deterministic rules;
+- [x] negative rule fixtures for non-matching behaviour;
+- [x] multi-detection regression suite;
+- [ ] detection quality metrics;
+- [ ] richer evidence retrieval;
+- [ ] final Phase 2 resilience and regression testing.
 
 The analyst UI remains a later concern. The backend finding model and workflow should be stable first.

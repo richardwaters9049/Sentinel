@@ -18,6 +18,7 @@ help:
 	@echo "  make resilience-phase1 Run the Phase 1 dependency recovery checks"
 	@echo "  make smoke-phase2    Run the Phase 2 detection-engineering smoke test"
 	@echo "  make workflow-phase2 Run the Phase 2 analyst workflow and detection-control test"
+	@echo "  make catalogue-phase2 Run the Phase 2 multi-detection catalogue test"
 	@echo "  make resilience-phase1  Run Phase 1 dependency failure/recovery tests"
 
 dev-up:
@@ -72,3 +73,6 @@ smoke-phase2:
 
 workflow-phase2:
 	./scripts/phase2-workflow-smoke.sh
+
+catalogue-phase2:
+	./scripts/phase2-catalogue-smoke.sh

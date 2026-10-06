@@ -11,6 +11,7 @@ import (
 
 type fakeRepository struct {
 	enabled       bool
+	enabledByID   map[string]bool
 	enabledErr    error
 	failures      []AuthFailure
 	queryErr      error
@@ -23,14 +24,14 @@ type fakeRepository struct {
 	queryLimit    int
 }
 
-func (f *fakeRepository) IsDetectionEnabled(context.Context, string) (bool, error) {
+func (f *fakeRepository) IsDetectionEnabled(_ context.Context, id string) (bool, error) {
 	if f.enabledErr != nil {
 		return false, f.enabledErr
 	}
-	if !f.enabled {
-		return false, nil
+	if f.enabledByID != nil {
+		return f.enabledByID[id], nil
 	}
-	return true, nil
+	return f.enabled, nil
 }
 
 func (f *fakeRepository) RecentAuthenticationFailures(
@@ -193,6 +194,87 @@ func TestProcessPropagatesRepositoryErrors(t *testing.T) {
 	err := New(repo).Process(context.Background(), successfulLogin(time.Now().UTC()))
 	if err == nil {
 		t.Fatal("expected query error")
+	}
+}
+
+func TestEngineEvaluatesEnabledRulesIndependently(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{
+		enabledByID: map[string]bool{
+			AuthBurstDetectionID:           false,
+			ServiceAccountLoginDetectionID: true,
+			CorporateToOTDetectionID:       false,
+		},
+	}
+
+	event := telemetry.Event{
+		EventID:   "evt_service_engine",
+		Timestamp: time.Now().UTC(),
+		Actor: &telemetry.Actor{
+			ID:   "svc-engine",
+			Type: "service_account",
+			Name: "Engine Service",
+		},
+		Event: telemetry.EventDetails{
+			Category: "authentication",
+			Action:   "login",
+			Outcome:  "success",
+		},
+	}
+
+	if err := New(repo).Process(context.Background(), event); err != nil {
+		t.Fatalf("expected multi-rule engine to process event, got %v", err)
+	}
+
+	if len(repo.created) != 1 {
+		t.Fatalf("expected one finding, got %d", len(repo.created))
+	}
+	if repo.created[0].DetectionID != ServiceAccountLoginDetectionID {
+		t.Fatalf("expected %q, got %q", ServiceAccountLoginDetectionID, repo.created[0].DetectionID)
+	}
+	if repo.queryLimit != 0 {
+		t.Fatal("disabled auth-burst rule should not query historical failures")
+	}
+}
+
+func TestEngineCanCreateNetworkFindingWithoutAuthQuery(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{
+		enabledByID: map[string]bool{
+			AuthBurstDetectionID:           false,
+			ServiceAccountLoginDetectionID: false,
+			CorporateToOTDetectionID:       true,
+		},
+	}
+
+	event := telemetry.Event{
+		EventID:   "evt_network_engine",
+		Timestamp: time.Now().UTC(),
+		Asset: &telemetry.Asset{
+			ID:       "asset-corp-engine",
+			Hostname: "employee-workstation-engine",
+			Zone:     "corporate",
+		},
+		Event: telemetry.EventDetails{
+			Category: "network",
+			Action:   "connection",
+		},
+		Network: &telemetry.Network{
+			DestinationIP:   "10.30.0.10",
+			DestinationZone: "ot",
+		},
+	}
+
+	if err := New(repo).Process(context.Background(), event); err != nil {
+		t.Fatalf("expected network rule to process event, got %v", err)
+	}
+	if len(repo.created) != 1 || repo.created[0].DetectionID != CorporateToOTDetectionID {
+		t.Fatalf("unexpected findings: %#v", repo.created)
+	}
+	if repo.queryLimit != 0 {
+		t.Fatal("network event should not invoke auth correlation query")
 	}
 }
 

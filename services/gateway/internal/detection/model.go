@@ -3,17 +3,26 @@ package detection
 import "time"
 
 const (
-	AuthBurstDetectionID      = "DET-AUTH-001"
-	AuthBurstDetectionVersion = 1
+	AuthBurstDetectionID           = "DET-AUTH-001"
+	AuthBurstDetectionVersion      = 1
+	ServiceAccountLoginDetectionID = "DET-AUTH-002"
+	ServiceAccountLoginVersion     = 1
+	CorporateToOTDetectionID       = "DET-NET-001"
+	CorporateToOTDetectionVersion  = 1
 )
 
 type Evidence struct {
-	EventIDs       []string `json:"event_ids"`
-	FailureCount   int      `json:"failure_count"`
-	IdentityID     string   `json:"identity_id"`
-	SourceIP       string   `json:"source_ip"`
-	WindowSeconds  int      `json:"window_seconds"`
-	SuccessEventID string   `json:"success_event_id"`
+	EventIDs        []string `json:"event_ids"`
+	FailureCount    int      `json:"failure_count,omitempty"`
+	IdentityID      string   `json:"identity_id,omitempty"`
+	ActorType       string   `json:"actor_type,omitempty"`
+	SourceIP        string   `json:"source_ip,omitempty"`
+	SourceZone      string   `json:"source_zone,omitempty"`
+	DestinationIP   string   `json:"destination_ip,omitempty"`
+	DestinationZone string   `json:"destination_zone,omitempty"`
+	WindowSeconds   int      `json:"window_seconds,omitempty"`
+	SuccessEventID  string   `json:"success_event_id,omitempty"`
+	TerminalEventID string   `json:"terminal_event_id,omitempty"`
 }
 
 type Finding struct {

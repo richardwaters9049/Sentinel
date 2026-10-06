@@ -156,6 +156,10 @@
           "minimum": 0,
           "maximum": 65535
         },
+        "destination_zone": {
+          "type": "string",
+          "maxLength": 64
+        },
         "protocol": {
           "type": "string",
           "maxLength": 32
