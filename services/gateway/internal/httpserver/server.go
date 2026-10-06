@@ -39,11 +39,17 @@ type AnalystStore interface {
 	ListHunts(context.Context) ([]hunting.Definition, error)
 	GetHunt(context.Context, string) (hunting.Definition, error)
 	RunHunt(context.Context, string, string, hunting.Query) (hunting.RunResult, error)
+	ListHuntRuns(context.Context, string, int) ([]hunting.RunRecord, error)
+	HuntRunEvents(context.Context, int64) ([]database.EventEvidenceRecord, error)
+	GetAssetPivot(context.Context, string, int) (database.AssetPivot, error)
+	GetIdentityPivot(context.Context, string, int) (database.IdentityPivot, error)
 	CreateInvestigation(context.Context, database.InvestigationCreateInput) (database.InvestigationDetail, error)
 	ListInvestigations(context.Context, string, int) ([]investigation.Record, error)
 	GetInvestigation(context.Context, string) (database.InvestigationDetail, error)
 	AddInvestigationNote(context.Context, string, string, string, string) (database.InvestigationDetail, error)
 	UpdateInvestigationStatus(context.Context, string, string, string, string) (database.InvestigationDetail, error)
+	AttachHuntRun(context.Context, string, int64, string, string) (database.InvestigationDetail, error)
+	UpdateInvestigationMetadata(context.Context, string, *string, *string, string, string) (database.InvestigationDetail, error)
 }
 
 type Server struct {
@@ -91,11 +97,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
 	s.mux.HandleFunc("GET /api/v1/hunts/{id}", s.handleHuntDetail)
 	s.mux.HandleFunc("POST /api/v1/hunts/{id}/run", s.handleRunHunt)
+	s.mux.HandleFunc("GET /api/v1/hunts/{id}/runs", s.handleHuntRuns)
+	s.mux.HandleFunc("GET /api/v1/assets/{id}/pivot", s.handleAssetPivot)
+	s.mux.HandleFunc("GET /api/v1/identities/{id}/pivot", s.handleIdentityPivot)
 	s.mux.HandleFunc("GET /api/v1/investigations", s.handleInvestigations)
 	s.mux.HandleFunc("POST /api/v1/investigations", s.handleCreateInvestigation)
 	s.mux.HandleFunc("GET /api/v1/investigations/{id}", s.handleInvestigationDetail)
 	s.mux.HandleFunc("POST /api/v1/investigations/{id}/notes", s.handleInvestigationNote)
 	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}/status", s.handleInvestigationStatus)
+	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}", s.handleInvestigationMetadata)
+	s.mux.HandleFunc("POST /api/v1/investigations/{id}/hunt-runs/{run_id}", s.handleAttachHuntRun)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

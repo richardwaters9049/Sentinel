@@ -157,21 +157,159 @@ func (d *Database) RunHunt(
 		return hunting.RunResult{}, fmt.Errorf("marshal hunt run parameters: %w", err)
 	}
 
-	if _, err := d.pool.Exec(ctx, `
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return hunting.RunResult{}, fmt.Errorf("begin hunt run transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var runID int64
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO hunt_runs (
 			hunt_id, actor_id, started_at, completed_at, result_count, parameters
 		)
 		VALUES ($1, $2, $3, NOW(), $4, $5)
-	`, id, actorID, startedAt, len(events), parameters); err != nil {
+		RETURNING id
+	`, id, actorID, startedAt, len(events), parameters).Scan(&runID); err != nil {
 		return hunting.RunResult{}, fmt.Errorf("record hunt run: %w", err)
 	}
 
+	for _, event := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO hunt_run_events (hunt_run_id, event_id)
+			VALUES ($1, $2)
+			ON CONFLICT DO NOTHING
+		`, runID, event.ID); err != nil {
+			return hunting.RunResult{}, fmt.Errorf("record hunt result event %s: %w", event.ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return hunting.RunResult{}, fmt.Errorf("commit hunt run transaction: %w", err)
+	}
+
 	return hunting.RunResult{
+		RunID:       runID,
 		HuntID:      id,
 		ResultCount: len(events),
 		Events:      events,
 		ExecutedAt:  time.Now().UTC(),
 	}, nil
+}
+
+func (d *Database) ListHuntRuns(
+	ctx context.Context,
+	huntID string,
+	limit int,
+) ([]hunting.RunRecord, error) {
+	if d == nil || d.pool == nil {
+		return nil, fmt.Errorf("database is not initialised")
+	}
+	if _, err := d.GetHunt(ctx, huntID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows, err := d.pool.Query(ctx, `
+		SELECT id, hunt_id, actor_id, started_at, completed_at, result_count, parameters
+		FROM hunt_runs
+		WHERE hunt_id = $1
+		ORDER BY started_at DESC, id DESC
+		LIMIT $2
+	`, huntID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query hunt runs: %w", err)
+	}
+	defer rows.Close()
+
+	runs := make([]hunting.RunRecord, 0, limit)
+	for rows.Next() {
+		var (
+			run        hunting.RunRecord
+			parameters []byte
+		)
+		if err := rows.Scan(
+			&run.ID,
+			&run.HuntID,
+			&run.ActorID,
+			&run.StartedAt,
+			&run.CompletedAt,
+			&run.ResultCount,
+			&parameters,
+		); err != nil {
+			return nil, fmt.Errorf("scan hunt run: %w", err)
+		}
+		if err := json.Unmarshal(parameters, &run.Parameters); err != nil {
+			return nil, fmt.Errorf("decode hunt run parameters: %w", err)
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate hunt runs: %w", err)
+	}
+	return runs, nil
+}
+
+func (d *Database) HuntRunEvents(
+	ctx context.Context,
+	runID int64,
+) ([]EventEvidenceRecord, error) {
+	if d == nil || d.pool == nil {
+		return nil, fmt.Errorf("database is not initialised")
+	}
+
+	rows, err := d.pool.Query(ctx, `
+		SELECT
+			e.id,
+			e.source_timestamp,
+			e.category,
+			e.action,
+			COALESCE(e.outcome, ''),
+			e.asset_id,
+			e.identity_id,
+			e.payload
+		FROM hunt_run_events hre
+		JOIN events e ON e.id = hre.event_id
+		WHERE hre.hunt_run_id = $1
+		ORDER BY e.source_timestamp DESC, e.id DESC
+	`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("query hunt run events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]EventEvidenceRecord, 0)
+	for rows.Next() {
+		var (
+			event   EventEvidenceRecord
+			payload []byte
+		)
+		if err := rows.Scan(
+			&event.ID,
+			&event.SourceTimestamp,
+			&event.Category,
+			&event.Action,
+			&event.Outcome,
+			&event.AssetID,
+			&event.IdentityID,
+			&payload,
+		); err != nil {
+			return nil, fmt.Errorf("scan hunt run event: %w", err)
+		}
+		if err := json.Unmarshal(payload, &event.Payload); err != nil {
+			return nil, fmt.Errorf("decode hunt run event payload: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate hunt run events: %w", err)
+	}
+	return events, nil
 }
 
 func (d *Database) executeHuntQuery(

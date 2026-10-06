@@ -22,7 +22,7 @@ The first production-shaped vertical slice is now implemented:
 6. query stored telemetry through `GET /api/v1/events`;
 7. verify idempotency and dependency recovery with repeatable smoke/resilience tests.
 
-Phase 2 adds a multi-rule detection engine, explainable findings, audited analyst workflows, and runtime detection controls. The verified catalogue includes DET-AUTH-001, DET-AUTH-002, and DET-NET-001. Phase 3 now adds saved hypothesis-driven hunts, bounded event searches, hunt-run history, durable investigations, analyst notes, evidence pivots, and unified investigation timelines.
+Phase 2 adds a multi-rule detection engine, explainable findings, audited analyst workflows, and runtime detection controls. The verified catalogue includes DET-AUTH-001, DET-AUTH-002, and DET-NET-001. Phase 3 now adds saved hypothesis-driven hunts, bounded event searches, durable hunt-run history, asset/identity pivots, durable investigations, analyst notes, exact hunt-result attachment, owner/priority management, and unified investigation timelines.
 
 The system should grow incrementally from that foundation. Every major component must be testable in isolation and understandable without requiring the full stack to run.
 

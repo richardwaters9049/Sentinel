@@ -32,7 +32,18 @@ type Definition struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type RunRecord struct {
+	ID          int64     `json:"id"`
+	HuntID      string    `json:"hunt_id"`
+	ActorID     string    `json:"actor_id"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at"`
+	ResultCount int       `json:"result_count"`
+	Parameters  Query     `json:"parameters"`
+}
+
 type RunResult struct {
+	RunID       int64       `json:"run_id"`
 	HuntID      string      `json:"hunt_id"`
 	ResultCount int         `json:"result_count"`
 	Events      interface{} `json:"events"`
