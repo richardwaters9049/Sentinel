@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Go
+bin/
+coverage.out
+*.test
+
+# Node / frontend
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Python
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Rust
+target/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# Local data
+data/
+tmp/
+*.log
+
+# Docker overrides
+compose.override.yaml
