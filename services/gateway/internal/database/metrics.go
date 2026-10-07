@@ -76,10 +76,11 @@ func (d *Database) DetectionMetrics(ctx context.Context) ([]DetectionMetrics, er
 }
 
 type FindingEvidenceContext struct {
-	FindingID      string                `json:"finding_id"`
-	LinkedEvents   []EventEvidenceRecord `json:"linked_events"`
-	ContextEvents  []EventEvidenceRecord `json:"context_events"`
-	ContextMinutes int                   `json:"context_minutes"`
+	FindingID      string                  `json:"finding_id"`
+	LinkedEvents   []EventEvidenceRecord   `json:"linked_events"`
+	ContextEvents  []EventEvidenceRecord   `json:"context_events"`
+	Enrichments    []EventEnrichmentRecord `json:"enrichments"`
+	ContextMinutes int                     `json:"context_minutes"`
 }
 
 func (d *Database) GetFindingEvidence(
@@ -115,10 +116,20 @@ func (d *Database) GetFindingEvidence(
 	}
 
 	if contextMinutes == 0 || len(linked) == 0 {
+		eventIDs := make([]string, 0, len(linked))
+		for _, event := range linked {
+			eventIDs = append(eventIDs, event.ID)
+		}
+		enrichments, err := d.eventEnrichmentsForEventIDs(ctx, eventIDs)
+		if err != nil {
+			return FindingEvidenceContext{}, err
+		}
+
 		return FindingEvidenceContext{
 			FindingID:      findingID,
 			LinkedEvents:   linked,
 			ContextEvents:  []EventEvidenceRecord{},
+			Enrichments:    enrichments,
 			ContextMinutes: contextMinutes,
 		}, nil
 	}
@@ -157,10 +168,20 @@ func (d *Database) GetFindingEvidence(
 		return FindingEvidenceContext{}, err
 	}
 
+	enrichmentEventIDs := append([]string(nil), linkedIDs...)
+	for _, event := range contextEvents {
+		enrichmentEventIDs = append(enrichmentEventIDs, event.ID)
+	}
+	enrichments, err := d.eventEnrichmentsForEventIDs(ctx, enrichmentEventIDs)
+	if err != nil {
+		return FindingEvidenceContext{}, err
+	}
+
 	return FindingEvidenceContext{
 		FindingID:      findingID,
 		LinkedEvents:   linked,
 		ContextEvents:  contextEvents,
+		Enrichments:    enrichments,
 		ContextMinutes: contextMinutes,
 	}, nil
 }

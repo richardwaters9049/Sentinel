@@ -169,3 +169,63 @@ func TestScenarioEventsIncludesIntelligenceIOCMatch(t *testing.T) {
 		t.Fatalf("unexpected intelligence labels: %#v", events[0]["labels"])
 	}
 }
+
+func TestScenarioEventsIncludesDomainAndSHA256IntelligenceMatches(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 21, 0, 0, 0, time.UTC)
+
+	domainEvents, err := scenarioEvents("intel-domain-match", start)
+	if err != nil {
+		t.Fatalf("domain intelligence scenario: %v", err)
+	}
+	if len(domainEvents) != 1 {
+		t.Fatalf("expected one domain event, got %d", len(domainEvents))
+	}
+	domainLabels, ok := domainEvents[0]["labels"].(map[string]string)
+	if !ok || domainLabels["dns.query"] != "telemetry-sync.example" {
+		t.Fatalf("unexpected domain labels: %#v", domainEvents[0]["labels"])
+	}
+
+	hashEvents, err := scenarioEvents("intel-sha256-match", start)
+	if err != nil {
+		t.Fatalf("sha256 intelligence scenario: %v", err)
+	}
+	if len(hashEvents) != 1 {
+		t.Fatalf("expected one sha256 event, got %d", len(hashEvents))
+	}
+	hashLabels, ok := hashEvents[0]["labels"].(map[string]string)
+	if !ok ||
+		hashLabels["file.sha256"] !=
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("unexpected sha256 labels: %#v", hashEvents[0]["labels"])
+	}
+}
+
+func TestScenarioEventsIncludesFindingEnrichmentMatch(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 21, 15, 0, 0, time.UTC)
+	events, err := scenarioEvents("intel-finding-match", start)
+	if err != nil {
+		t.Fatalf("finding enrichment scenario: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+
+	network, ok := events[0]["network"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected network payload, got %#v", events[0]["network"])
+	}
+	if network["source_ip"] != "10.10.0.25" ||
+		network["destination_zone"] != "ot" ||
+		network["destination_port"] != 502 {
+		t.Fatalf("unexpected finding-match network context: %#v", network)
+	}
+
+	asset, ok := events[0]["asset"].(map[string]interface{})
+	if !ok || asset["zone"] != "corporate" {
+		t.Fatalf("expected corporate source asset, got %#v", events[0]["asset"])
+	}
+}

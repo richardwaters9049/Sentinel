@@ -19,16 +19,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   getIntelligenceMetrics,
   listIntelligenceIndicators,
   listIntelligenceMatches,
+  listIntelligenceSources,
+  setIntelligenceSourceEnabled,
 } from "@/lib/sentinel/client";
 import type {
   EventEnrichment,
   IntelligenceIndicator,
   IntelligenceMetrics,
+  IntelligenceSource,
 } from "@/lib/sentinel/types";
 
 function confidenceTone(value: number) {
@@ -46,21 +50,26 @@ export default function IntelligenceWorkspace() {
   const [metrics, setMetrics] = useState<IntelligenceMetrics | null>(null);
   const [indicators, setIndicators] = useState<IntelligenceIndicator[]>([]);
   const [matches, setMatches] = useState<EventEnrichment[]>([]);
+  const [sources, setSources] = useState<IntelligenceSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busySourceID, setBusySourceID] = useState("");
   const [error, setError] = useState("");
 
   async function refresh() {
     setLoading(true);
     setError("");
     try {
-      const [metricData, indicatorData, matchData] = await Promise.all([
-        getIntelligenceMetrics(),
-        listIntelligenceIndicators(),
-        listIntelligenceMatches(50),
-      ]);
+      const [metricData, indicatorData, matchData, sourceData] =
+        await Promise.all([
+          getIntelligenceMetrics(),
+          listIntelligenceIndicators(),
+          listIntelligenceMatches(50),
+          listIntelligenceSources(),
+        ]);
       setMetrics(metricData);
       setIndicators(indicatorData.indicators);
       setMatches(matchData.matches);
+      setSources(sourceData.sources);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -79,11 +88,13 @@ export default function IntelligenceWorkspace() {
       getIntelligenceMetrics(controller.signal),
       listIntelligenceIndicators(controller.signal),
       listIntelligenceMatches(50, controller.signal),
+      listIntelligenceSources(controller.signal),
     ])
-      .then(([metricData, indicatorData, matchData]) => {
+      .then(([metricData, indicatorData, matchData, sourceData]) => {
         setMetrics(metricData);
         setIndicators(indicatorData.indicators);
         setMatches(matchData.matches);
+        setSources(sourceData.sources);
       })
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -98,10 +109,49 @@ export default function IntelligenceWorkspace() {
     return () => controller.abort();
   }, []);
 
-  const sourceNames = useMemo(
-    () => Array.from(new Set(indicators.map((indicator) => indicator.source_name))),
-    [indicators],
-  );
+  const conflictingValues = useMemo(() => {
+    const classifications = new Map<string, Set<string>>();
+    for (const match of matches) {
+      const key = match.indicator_type + ":" + match.observed_value;
+      const value =
+        typeof match.context.classification === "string"
+          ? match.context.classification
+          : "unclassified";
+      const current = classifications.get(key) ?? new Set<string>();
+      current.add(value);
+      classifications.set(key, current);
+    }
+
+    return new Set(
+      Array.from(classifications.entries())
+        .filter(([, values]) => values.size > 1)
+        .map(([key]) => key),
+    );
+  }, [matches]);
+
+  async function toggleSource(source: IntelligenceSource) {
+    setBusySourceID(source.id);
+    setError("");
+    try {
+      const updated = await setIntelligenceSourceEnabled(
+        source.id,
+        !source.active,
+        "phase6-analyst",
+      );
+      setSources((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      await refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Intelligence source state could not be updated",
+      );
+    } finally {
+      setBusySourceID("");
+    }
+  }
 
   return (
     <main className="sentinel-grid sentinel-glow min-h-screen bg-[#070a0f] text-slate-100">
@@ -304,28 +354,51 @@ export default function IntelligenceWorkspace() {
                 <CardHeader className="px-5 pb-4 pt-5">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="size-4 text-violet-300" />
-                    <h2 className="text-[0.9rem] font-semibold text-slate-100">
-                      Provenance model
-                    </h2>
+                    <div>
+                      <h2 className="text-[0.9rem] font-semibold text-slate-100">
+                        Sources & provenance
+                      </h2>
+                      <p className="mt-1 text-[0.61rem] leading-5 text-violet-100/40">
+                        Runtime source state is audited and immediately invalidates
+                        cached intelligence results.
+                      </p>
+                    </div>
                   </div>
                 </CardHeader>
                 <Separator className="bg-violet-400/10" />
                 <CardContent className="space-y-3 p-5">
                   <div className="text-[0.65rem] leading-5 text-slate-500">
-                    Sentinel does not treat an IOC as unquestionable truth. Each
-                    match carries the source confidence, indicator confidence,
-                    effective confidence, and source provenance used to derive it.
+                    Sentinel keeps source confidence independent from indicator
+                    confidence and preserves the provenance used when a match is
+                    recorded.
                   </div>
-                  {sourceNames.map((name) => (
+                  {sources.map((source) => (
                     <div
-                      key={name}
+                      key={source.id}
                       className="rounded-xl border border-violet-400/10 bg-slate-950/30 p-3"
                     >
-                      <div className="text-[0.66rem] font-semibold text-violet-200">
-                        {name}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[0.66rem] font-semibold text-violet-200">
+                            {source.name}
+                          </div>
+                          <div className="mt-1 text-[0.56rem] text-violet-200/40">
+                            {source.source_type} · default confidence{" "}
+                            {source.default_confidence}%
+                          </div>
+                        </div>
+                        <Switch
+                          checked={source.active}
+                          disabled={busySourceID === source.id}
+                          onCheckedChange={() => void toggleSource(source)}
+                          aria-label={
+                            (source.active ? "Disable " : "Enable ") + source.name
+                          }
+                          className="cursor-pointer data-checked:bg-emerald-400"
+                        />
                       </div>
-                      <div className="mt-1 text-[0.56rem] text-violet-200/40">
-                        Local synthetic source · no external dependency
+                      <div className="mt-2 text-[0.57rem] leading-5 text-slate-600">
+                        {source.description}
                       </div>
                     </div>
                   ))}
@@ -351,8 +424,20 @@ export default function IntelligenceWorkspace() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate font-mono text-[0.64rem] font-semibold text-slate-300">
-                              {match.observed_value}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="truncate font-mono text-[0.64rem] font-semibold text-slate-300">
+                                {match.observed_value}
+                              </div>
+                              {conflictingValues.has(
+                                match.indicator_type + ":" + match.observed_value,
+                              ) ? (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-300/20 bg-amber-300/[0.05] text-[0.5rem] text-amber-200"
+                                >
+                                  SOURCE DISAGREEMENT
+                                </Badge>
+                              ) : null}
                             </div>
                             <div className="mt-1 truncate text-[0.57rem] text-slate-700">
                               {match.event_field} · {match.indicator_id}

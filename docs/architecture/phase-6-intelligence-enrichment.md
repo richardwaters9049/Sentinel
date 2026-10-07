@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-6-intelligence-enrichment
@@ -10,31 +10,31 @@ feat/phase-6-intelligence-enrichment
 
 ## Objective
 
-Phase 6 adds provenance-aware threat intelligence to Sentinel without turning external reputation into unquestioned truth.
+Phase 6 adds provenance-aware threat intelligence to Sentinel without treating external or local reputation as unquestioned truth.
 
-The first vertical slice is deliberately local-first. It uses repository-owned synthetic threat-intelligence fixtures so development, testing, and demonstrations remain deterministic and do not depend on third-party feeds.
+The implementation is local-first and deterministic. Repository-owned synthetic fixtures keep development, demonstrations, and regression testing independent of third-party feeds.
 
-The pipeline is:
+The completed pipeline is:
 
 ```text
 persisted telemetry
       ↓
-network IOC extraction
+IOC candidate extraction
       ↓
-normalisation
+strict normalisation
       ↓
-bounded enrichment cache
+revision-aware bounded cache
       ↓
-local indicator lookup
+active + valid indicator lookup
       ↓
 confidence calculation
       ↓
-persisted event enrichment
+persisted enrichment
       ↓
-analyst API / console
+findings / investigations / analyst console
 ```
 
-## Local threat-intelligence fixtures
+## Intelligence storage
 
 Phase 6 introduces:
 
@@ -44,45 +44,103 @@ threat_indicators
 event_enrichments
 ```
 
-The initial source is:
+Sources retain:
+
+- stable ID and source type;
+- default confidence;
+- active/inactive runtime state;
+- provenance metadata;
+- timestamps used to invalidate enrichment-cache entries after source changes.
+
+Indicators retain:
+
+- type: IP, domain, or SHA-256;
+- original and normalised value;
+- source;
+- confidence;
+- validity window;
+- tags and contextual classification.
+
+Event enrichments retain a snapshot of the intelligence used at match time:
+
+- event and indicator IDs;
+- matched event field and observed value;
+- source confidence;
+- indicator confidence;
+- effective confidence;
+- source provenance;
+- match timestamp.
+
+The uniqueness boundary is:
+
+```text
+(event_id, indicator_id, event_field)
+```
+
+so retries remain idempotent.
+
+## Local intelligence catalogue
+
+The completed phase uses two synthetic sources:
 
 ```text
 intel-local-northstar
 Northstar Local Threat Intelligence
-source_type = local_fixture
-default_confidence = 85
+default confidence = 85
+
+intel-local-review
+Northstar Analyst Review Feed
+default confidence = 70
 ```
 
-Its provenance explicitly states that it is:
+Both are repository-owned local fixtures with no external dependency.
 
-- repository-owned;
-- curated synthetic data;
-- based on documentation-only network addresses;
-- independent of external services.
+The catalogue contains safe fixtures for:
 
-Initial fixtures include:
+- documentation-only external IP addresses;
+- a synthetic internal watchlist IP;
+- a reserved `.example` domain;
+- a synthetic SHA-256 value;
+- an intentionally expired indicator.
 
-- `198.51.100.66` — synthetic command-and-control context;
-- `203.0.113.77` — synthetic staging context;
-- `telemetry-sync.example` — reserved synthetic domain fixture for later DNS enrichment.
+The same IP/domain can appear in more than one source so Sentinel can preserve disagreement instead of collapsing conflicting intelligence into one truth value.
 
-Only IP matching is active in the first runtime slice. The schema already supports domain and SHA-256 indicators for later work.
+## IOC matching
+
+The enrichment engine evaluates:
+
+```text
+network.source_ip
+network.destination_ip
+labels.dns.query
+labels.file.sha256
+```
+
+Normalisation is type-specific:
+
+- IP values use Go's IP parser;
+- domains are lower-cased, trailing-dot normalised, and structurally validated;
+- SHA-256 values must be exactly 64 hexadecimal characters and are normalised to lower case.
+
+Invalid candidates are ignored rather than queried.
 
 ## Confidence model
 
-Sentinel retains two independent confidence values:
-
-- source confidence;
-- indicator confidence.
-
-The runtime computes:
+Sentinel preserves separate confidence dimensions:
 
 ```text
-effective_confidence =
-    round(source_confidence × indicator_confidence / 100)
+source confidence
+indicator confidence
+effective confidence
 ```
 
-For the primary fixture:
+Effective confidence is:
+
+```text
+round(source_confidence × indicator_confidence / 100)
+```
+
+For example:
 
 ```text
 source confidence     = 85
@@ -90,154 +148,188 @@ indicator confidence  = 95
 effective confidence  = 81
 ```
 
-This deliberately avoids presenting feed data as binary truth.
+Different sources can classify the same IOC differently. The analyst console surfaces this as source disagreement rather than silently choosing one source.
 
-## Provenance
+## Validity and runtime source state
 
-Every event enrichment stores a provenance snapshot from the source that produced the match.
+Runtime lookups require:
 
-Analysts can therefore see:
+- source `active = true`;
+- `valid_from <= observed event time`;
+- no `valid_until`, or the indicator remains valid for the event time.
 
-- source identifier;
-- source name/type;
-- source confidence;
-- indicator confidence;
-- effective confidence;
-- tags;
-- indicator context;
-- source provenance;
-- matched event field and value;
-- match timestamp.
+The analyst indicator catalogue also excludes expired indicators using the current time.
+
+Threat-intelligence sources can be enabled or disabled through:
+
+```text
+GET   /api/v1/intelligence/sources
+PATCH /api/v1/intelligence/sources/{id}
+```
+
+State changes:
+
+- require the temporary development actor header;
+- reject unchanged state;
+- use a row-locked transaction;
+- write `intelligence_source.enabled_changed` audit events;
+- update the source revision so cached results are invalidated immediately.
 
 ## Enrichment cache
 
-The first enrichment engine includes a bounded in-memory cache:
+The enrichment engine uses a bounded in-memory cache:
 
-- default TTL: five minutes;
-- maximum entries: 1,024;
-- caches positive lookups;
-- caches negative lookups;
-- cache keys include indicator type and normalised value.
+- five-minute TTL;
+- 1,024-entry maximum;
+- positive and negative results;
+- key = indicator type + normalised value;
+- each entry stores the intelligence-source revision.
 
-Caching occurs after normalisation and before repository lookup.
+A cache hit requires both a valid TTL and the same intelligence revision. Source-state changes therefore invalidate cached IOC results without waiting for TTL expiry.
 
-Unit tests verify repeated negative lookups do not repeatedly query PostgreSQL.
+Unit and integration tests cover positive caching, negative caching, and revision-triggered invalidation.
 
-## Event matching
-
-The first slice evaluates:
-
-```text
-network.source_ip
-network.destination_ip
-```
-
-IP values are normalised with Go's IP parser before lookup.
-
-Matches are persisted idempotently using:
-
-```text
-(event_id, indicator_id, event_field)
-```
-
-as the uniqueness boundary.
+Detailed cache hit/miss telemetry is intentionally deferred to the broader observability/platform work rather than added as Phase 6 product scope.
 
 ## Telemetry processing
 
-The existing telemetry persistence flow now uses an ordered processor chain:
+Persisted telemetry passes through an ordered processor chain:
 
 ```text
 event persisted
       ↓
-detection engine
+deterministic detection
       ↓
-enrichment engine
+threat-intelligence enrichment
 ```
 
-If a processor fails, the chain stops and the JetStream message remains retryable under the existing consumer behaviour.
+A processor failure stops the chain and preserves the existing JetStream retry behaviour.
 
 ## Analyst APIs
 
-Phase 6 adds:
+Phase 6 provides:
 
 ```text
-GET /api/v1/intelligence/indicators
-GET /api/v1/intelligence/matches
-GET /api/v1/intelligence/metrics
-GET /api/v1/events/{id}/enrichments
+GET   /api/v1/intelligence/indicators
+GET   /api/v1/intelligence/sources
+PATCH /api/v1/intelligence/sources/{id}
+GET   /api/v1/intelligence/matches
+GET   /api/v1/intelligence/metrics
+GET   /api/v1/events/{id}/enrichments
 ```
 
-Indicator queries support bounded limits and optional type/value filters.
+Indicator queries are bounded and support optional type/value filters.
 
-The metrics endpoint reports:
+Metrics include:
 
 - active sources;
 - active indicators;
 - enriched events;
-- total matches;
-- high-confidence hits.
+- total enrichment matches;
+- high-confidence matches.
 
-## Synthetic scenario
+## Finding and investigation integration
 
-The simulator now includes:
+Threat intelligence is now part of the analyst workflow rather than isolated on a separate page.
+
+Finding detail includes enrichments attached to linked evidence events.
+
+Finding evidence context includes enrichments across both:
+
+- direct linked evidence;
+- nearby contextual evidence returned by the bounded context window.
+
+Investigation detail includes enrichments for evidence already attached to the case.
+
+The database uses one bounded bulk query for related event IDs rather than one enrichment query per event.
+
+## Synthetic simulator scenarios
+
+Phase 6 includes:
 
 ```text
 intel-ioc-match
+intel-domain-match
+intel-sha256-match
+intel-finding-match
 ```
 
-It produces a synthetic network connection to the documentation-only address:
+They exercise IP, domain, SHA-256, and finding/investigation propagation using only synthetic metadata and reserved/documentation values.
 
-```text
-198.51.100.66
-```
-
-No real threat-infrastructure contact occurs.
+No real threat infrastructure is contacted.
 
 ## Analyst console
 
-Phase 6 adds:
+The Intelligence workspace is available at:
 
 ```text
 /intelligence
 ```
 
-The workspace shows:
+It shows:
 
 - live intelligence metrics;
 - indicator catalogue;
-- source/indicator/effective confidence;
-- indicator tags and classification;
-- provenance model;
-- recent enrichment matches.
+- source / indicator / effective confidence;
+- tags and classifications;
+- source provenance;
+- audited source enable/disable controls;
+- recent enrichment matches;
+- explicit source-disagreement indicators.
 
-The shared drawer navigation now exposes the Intelligence workspace.
+Findings and Investigations now display relevant IOC context in their existing workflows.
 
 ## Verification
 
-The first Phase 6 smoke test is:
+Phase 6 provides:
+
+```text
+scripts/phase6-intelligence-smoke.sh
+scripts/phase6-final-regression.sh
+```
+
+with:
 
 ```bash
 make smoke-phase6
+make final-phase6
 ```
 
-It runs with an isolated temporary NATS JetStream instance and verifies:
+The Phase 6 workflow regression verifies:
 
-1. local intelligence fixtures are migrated;
-2. the indicator API returns source provenance and confidence;
-3. synthetic IOC-match telemetry is persisted;
-4. the enrichment engine matches the IOC;
-5. the match is linked to the correct event field;
-6. source and indicator confidence are preserved;
-7. effective confidence is calculated correctly;
-8. provenance and classification context are preserved;
-9. intelligence metrics reflect the enrichment.
+1. two-source local intelligence catalogue;
+2. expired-indicator filtering;
+3. IP enrichment;
+4. domain enrichment;
+5. SHA-256 enrichment;
+6. provenance preservation;
+7. confidence calculation;
+8. multi-source disagreement;
+9. audited source disable/enable;
+10. immediate cache invalidation after source-state change;
+11. finding enrichment propagation;
+12. finding-evidence enrichment propagation;
+13. investigation enrichment propagation;
+14. intelligence metrics.
 
-## Remaining Phase 6 work
+The complete Phase 6 final regression also runs the full Phase 5 baseline and frontend lint/production build.
 
-- add DNS/domain enrichment against the existing local fixture model;
-- add SHA-256 enrichment fixtures and safe endpoint-file metadata scenarios;
-- expose enrichment context directly inside finding and investigation workflows;
-- add source enable/disable and expiry behaviour;
-- add cache observability;
-- add richer provenance conflict handling when multiple sources disagree;
-- add Phase 6 final regression once the enrichment catalogue is mature.
+The complete Phase 6 final regression passes.
+
+## Phase 6 completion criteria
+
+- [x] local threat-intelligence fixtures;
+- [x] IP IOC enrichment;
+- [x] DNS/domain enrichment;
+- [x] SHA-256 enrichment;
+- [x] provenance model;
+- [x] source / indicator / effective confidence model;
+- [x] bounded positive and negative enrichment caching;
+- [x] revision-aware cache invalidation;
+- [x] source enable/disable and expiry behaviour;
+- [x] multi-source disagreement handling;
+- [x] finding enrichment;
+- [x] investigation enrichment;
+- [x] analyst-console intelligence workflow;
+- [x] Phase 6 end-to-end smoke test;
+- [x] Phase 6 full regression suite.

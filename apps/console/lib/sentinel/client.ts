@@ -17,6 +17,8 @@ import type {
   IntelligenceIndicatorListResponse,
   IntelligenceMatchListResponse,
   IntelligenceMetrics,
+  IntelligenceSource,
+  IntelligenceSourceListResponse,
 } from "@/lib/sentinel/types";
 
 type APIErrorPayload = {
@@ -237,6 +239,36 @@ export async function listIntelligenceIndicators(
     },
   );
   return readJSON<IntelligenceIndicatorListResponse>(response);
+}
+
+
+export async function listIntelligenceSources(
+  signal?: AbortSignal,
+): Promise<IntelligenceSourceListResponse> {
+  const response = await fetch("/api/sentinel/api/v1/intelligence/sources", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<IntelligenceSourceListResponse>(response);
+}
+
+export async function setIntelligenceSourceEnabled(
+  id: string,
+  enabled: boolean,
+  actorID: string,
+): Promise<IntelligenceSource> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/intelligence/sources/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  return readJSON<IntelligenceSource>(response);
 }
 
 export async function listIntelligenceMatches(

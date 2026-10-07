@@ -3,10 +3,12 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 )
 
@@ -36,12 +38,190 @@ type EventEnrichmentRecord struct {
 	MatchedAt           time.Time              `json:"matched_at"`
 }
 
+type ThreatIntelSourceRecord struct {
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	SourceType        string                 `json:"source_type"`
+	Description       string                 `json:"description"`
+	DefaultConfidence int                    `json:"default_confidence"`
+	Provenance        map[string]interface{} `json:"provenance"`
+	Active            bool                   `json:"active"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+}
+
 type IntelligenceMetrics struct {
 	ActiveSources      int `json:"active_sources"`
 	ActiveIndicators   int `json:"active_indicators"`
 	EnrichedEvents     int `json:"enriched_events"`
 	TotalMatches       int `json:"total_matches"`
 	HighConfidenceHits int `json:"high_confidence_hits"`
+}
+
+var (
+	ErrIntelligenceSourceNotFound  = errors.New("intelligence source not found")
+	ErrIntelligenceSourceUnchanged = errors.New("intelligence source state unchanged")
+)
+
+func (d *Database) IntelligenceRevision(ctx context.Context) (time.Time, error) {
+	if d == nil || d.pool == nil {
+		return time.Time{}, fmt.Errorf("database is not initialised")
+	}
+
+	var revision time.Time
+	if err := d.pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(updated_at), TIMESTAMPTZ '1970-01-01T00:00:00Z')
+		FROM threat_intel_sources
+	`).Scan(&revision); err != nil {
+		return time.Time{}, fmt.Errorf("query intelligence revision: %w", err)
+	}
+	return revision.UTC(), nil
+}
+
+func (d *Database) ListIntelligenceSources(
+	ctx context.Context,
+) ([]ThreatIntelSourceRecord, error) {
+	if d == nil || d.pool == nil {
+		return nil, fmt.Errorf("database is not initialised")
+	}
+
+	rows, err := d.pool.Query(ctx, `
+		SELECT
+			id,
+			name,
+			source_type,
+			description,
+			default_confidence,
+			provenance,
+			active,
+			created_at,
+			updated_at
+		FROM threat_intel_sources
+		ORDER BY name, id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query intelligence sources: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]ThreatIntelSourceRecord, 0, 8)
+	for rows.Next() {
+		var (
+			record         ThreatIntelSourceRecord
+			provenanceJSON []byte
+		)
+		if err := rows.Scan(
+			&record.ID,
+			&record.Name,
+			&record.SourceType,
+			&record.Description,
+			&record.DefaultConfidence,
+			&provenanceJSON,
+			&record.Active,
+			&record.CreatedAt,
+			&record.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan intelligence source: %w", err)
+		}
+		if err := json.Unmarshal(provenanceJSON, &record.Provenance); err != nil {
+			return nil, fmt.Errorf("decode intelligence source provenance: %w", err)
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate intelligence sources: %w", err)
+	}
+	return result, nil
+}
+
+func (d *Database) SetIntelligenceSourceEnabled(
+	ctx context.Context,
+	id string,
+	enabled bool,
+	actorID string,
+	requestID string,
+) (ThreatIntelSourceRecord, error) {
+	if d == nil || d.pool == nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("database is not initialised")
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ThreatIntelSourceRecord{}, ErrIntelligenceSourceNotFound
+	}
+
+	tx, err := d.pool.Begin(ctx)
+	if err != nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("begin intelligence-source transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var current bool
+	if err := tx.QueryRow(
+		ctx,
+		"SELECT active FROM threat_intel_sources WHERE id = $1 FOR UPDATE",
+		id,
+	).Scan(&current); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ThreatIntelSourceRecord{}, ErrIntelligenceSourceNotFound
+		}
+		return ThreatIntelSourceRecord{}, fmt.Errorf("query intelligence source state: %w", err)
+	}
+	if current == enabled {
+		return ThreatIntelSourceRecord{}, ErrIntelligenceSourceUnchanged
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE threat_intel_sources
+		SET active = $2, updated_at = NOW()
+		WHERE id = $1
+	`, id, enabled); err != nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("update intelligence source state: %w", err)
+	}
+
+	details, err := json.Marshal(map[string]bool{
+		"from": current,
+		"to":   enabled,
+	})
+	if err != nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("marshal intelligence source audit details: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO audit_events (
+			actor_id,
+			action,
+			resource_type,
+			resource_id,
+			request_id,
+			details
+		)
+		VALUES (
+			NULLIF($1, ''),
+			'intelligence_source.enabled_changed',
+			'intelligence_source',
+			$2,
+			NULLIF($3, ''),
+			$4
+		)
+	`, actorID, id, requestID, details); err != nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("insert intelligence source audit event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return ThreatIntelSourceRecord{}, fmt.Errorf("commit intelligence-source transaction: %w", err)
+	}
+
+	sources, err := d.ListIntelligenceSources(ctx)
+	if err != nil {
+		return ThreatIntelSourceRecord{}, err
+	}
+	for _, source := range sources {
+		if source.ID == id {
+			return source, nil
+		}
+	}
+	return ThreatIntelSourceRecord{}, ErrIntelligenceSourceNotFound
 }
 
 func (d *Database) LookupIndicators(
@@ -220,7 +400,11 @@ func (d *Database) ListIntelligenceIndicators(
 	}
 
 	args := make([]interface{}, 0, 3)
-	conditions := []string{"s.active = TRUE"}
+	conditions := []string{
+		"s.active = TRUE",
+		"i.valid_from <= NOW()",
+		"(i.valid_until IS NULL OR i.valid_until >= NOW())",
+	}
 	addArg := func(value interface{}) string {
 		args = append(args, value)
 		return fmt.Sprintf("$%d", len(args))
@@ -386,6 +570,62 @@ func (d *Database) GetEventEnrichments(
 		return nil, fmt.Errorf("iterate event enrichments: %w", err)
 	}
 
+	return result, nil
+}
+
+func (d *Database) eventEnrichmentsForEventIDs(
+	ctx context.Context,
+	eventIDs []string,
+) ([]EventEnrichmentRecord, error) {
+	if d == nil || d.pool == nil {
+		return nil, fmt.Errorf("database is not initialised")
+	}
+	if len(eventIDs) == 0 {
+		return []EventEnrichmentRecord{}, nil
+	}
+
+	rows, err := d.pool.Query(ctx, `
+		SELECT
+			e.id,
+			e.event_id,
+			e.indicator_id,
+			e.source_id,
+			s.name,
+			s.source_type,
+			i.indicator_type,
+			i.value,
+			e.event_field,
+			e.observed_value,
+			e.source_confidence,
+			e.indicator_confidence,
+			e.effective_confidence,
+			i.tags,
+			i.context,
+			e.provenance,
+			e.matched_at
+		FROM event_enrichments e
+		JOIN threat_indicators i ON i.id = e.indicator_id
+		JOIN threat_intel_sources s ON s.id = e.source_id
+		WHERE e.event_id = ANY($1)
+		ORDER BY e.matched_at, e.id
+		LIMIT 500
+	`, eventIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query event enrichments for evidence: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]EventEnrichmentRecord, 0, len(eventIDs))
+	for rows.Next() {
+		record, err := scanEventEnrichment(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate event enrichments for evidence: %w", err)
+	}
 	return result, nil
 }
 

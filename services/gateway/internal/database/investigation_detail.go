@@ -14,11 +14,12 @@ import (
 
 type InvestigationDetail struct {
 	investigation.Record
-	Findings []FindingRecord              `json:"findings"`
-	Events   []EventEvidenceRecord        `json:"events"`
-	Notes    []investigation.Note         `json:"notes"`
-	Audit    []AuditRecord                `json:"audit"`
-	Timeline []InvestigationTimelineEntry `json:"timeline"`
+	Findings    []FindingRecord              `json:"findings"`
+	Events      []EventEvidenceRecord        `json:"events"`
+	Enrichments []EventEnrichmentRecord      `json:"enrichments"`
+	Notes       []investigation.Note         `json:"notes"`
+	Audit       []AuditRecord                `json:"audit"`
+	Timeline    []InvestigationTimelineEntry `json:"timeline"`
 }
 
 type InvestigationTimelineEntry struct {
@@ -67,6 +68,15 @@ func (d *Database) GetInvestigation(
 	if err != nil {
 		return InvestigationDetail{}, err
 	}
+	eventIDs := make([]string, 0, len(events))
+	for _, event := range events {
+		eventIDs = append(eventIDs, event.ID)
+	}
+	enrichments, err := d.eventEnrichmentsForEventIDs(ctx, eventIDs)
+	if err != nil {
+		return InvestigationDetail{}, err
+	}
+
 	notes, err := d.investigationNotes(ctx, id)
 	if err != nil {
 		return InvestigationDetail{}, err
@@ -77,12 +87,13 @@ func (d *Database) GetInvestigation(
 	}
 
 	return InvestigationDetail{
-		Record:   record,
-		Findings: findings,
-		Events:   events,
-		Notes:    notes,
-		Audit:    audit,
-		Timeline: buildInvestigationTimeline(findings, events, notes, audit),
+		Record:      record,
+		Findings:    findings,
+		Events:      events,
+		Enrichments: enrichments,
+		Notes:       notes,
+		Audit:       audit,
+		Timeline:    buildInvestigationTimeline(findings, events, notes, audit),
 	}, nil
 }
 

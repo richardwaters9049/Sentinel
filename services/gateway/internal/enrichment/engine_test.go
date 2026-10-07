@@ -3,6 +3,7 @@ package enrichment
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ type fakeRepository struct {
 	indicators []Indicator
 	lookupErr  error
 	saveErr    error
+	revision   time.Time
 	lookups    int
 	saved      []Match
 }
@@ -25,6 +27,13 @@ func (f *fakeRepository) LookupIndicators(
 ) ([]Indicator, error) {
 	f.lookups++
 	return append([]Indicator(nil), f.indicators...), f.lookupErr
+}
+
+func (f *fakeRepository) IntelligenceRevision(context.Context) (time.Time, error) {
+	if f.revision.IsZero() {
+		return time.Unix(1, 0).UTC(), nil
+	}
+	return f.revision, nil
 }
 
 func (f *fakeRepository) SaveEventEnrichments(
@@ -166,5 +175,143 @@ func TestEffectiveConfidence(t *testing.T) {
 				tc.want,
 			)
 		}
+	}
+}
+
+func TestEngineEnrichesDomainAndSHA256Labels(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{
+		indicators: []Indicator{
+			{
+				ID:               "ioc-domain",
+				SourceID:         "source-1",
+				SourceConfidence: 85,
+				Confidence:       92,
+			},
+		},
+	}
+	engine := New(repo)
+
+	domainEvent := telemetry.Event{
+		EventID:   "evt-domain",
+		Timestamp: time.Now().UTC(),
+		Labels: map[string]string{
+			"dns.query": "Telemetry-Sync.Example.",
+		},
+	}
+	if err := engine.Process(context.Background(), domainEvent); err != nil {
+		t.Fatalf("process domain enrichment: %v", err)
+	}
+	if len(repo.saved) != 1 {
+		t.Fatalf("expected one domain enrichment, got %d", len(repo.saved))
+	}
+	if repo.saved[0].EventField != "labels.dns.query" {
+		t.Fatalf("unexpected domain field %q", repo.saved[0].EventField)
+	}
+	if repo.saved[0].ObservedValue != "telemetry-sync.example" {
+		t.Fatalf("unexpected normalized domain %q", repo.saved[0].ObservedValue)
+	}
+
+	repo.saved = nil
+	repo.indicators = []Indicator{
+		{
+			ID:               "ioc-sha",
+			SourceID:         "source-1",
+			SourceConfidence: 85,
+			Confidence:       90,
+		},
+	}
+
+	hash := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	hashEvent := telemetry.Event{
+		EventID:   "evt-hash",
+		Timestamp: time.Now().UTC(),
+		Labels: map[string]string{
+			"file.sha256": hash,
+		},
+	}
+	if err := engine.Process(context.Background(), hashEvent); err != nil {
+		t.Fatalf("process hash enrichment: %v", err)
+	}
+	if len(repo.saved) != 1 {
+		t.Fatalf("expected one hash enrichment, got %d", len(repo.saved))
+	}
+	if repo.saved[0].EventField != "labels.file.sha256" {
+		t.Fatalf("unexpected hash field %q", repo.saved[0].EventField)
+	}
+	if repo.saved[0].ObservedValue != strings.ToLower(hash) {
+		t.Fatalf("unexpected normalized hash %q", repo.saved[0].ObservedValue)
+	}
+}
+
+func TestNormaliseDomainAndSHA256RejectInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	if got := normaliseDomain(" telemetry-sync.example. "); got != "telemetry-sync.example" {
+		t.Fatalf("unexpected domain normalization %q", got)
+	}
+	if got := normaliseDomain("not a domain"); got != "" {
+		t.Fatalf("expected invalid domain rejection, got %q", got)
+	}
+	if got := normaliseDomain("localhost"); got != "" {
+		t.Fatalf("expected single-label domain rejection, got %q", got)
+	}
+
+	validHash := strings.Repeat("a", 64)
+	if got := normaliseSHA256(strings.ToUpper(validHash)); got != validHash {
+		t.Fatalf("unexpected hash normalization %q", got)
+	}
+	if got := normaliseSHA256("deadbeef"); got != "" {
+		t.Fatalf("expected short hash rejection, got %q", got)
+	}
+}
+
+func TestEngineInvalidatesCacheWhenIntelligenceRevisionChanges(t *testing.T) {
+	t.Parallel()
+
+	repo := &fakeRepository{
+		revision: time.Unix(10, 0).UTC(),
+		indicators: []Indicator{
+			{
+				ID:               "ioc-revision-a",
+				SourceID:         "source-a",
+				SourceConfidence: 80,
+				Confidence:       90,
+			},
+		},
+	}
+	engine := New(repo)
+	event := telemetry.Event{
+		EventID:   "evt-revision-a",
+		Timestamp: time.Now().UTC(),
+		Network: &telemetry.Network{
+			DestinationIP: "198.51.100.66",
+		},
+	}
+
+	if err := engine.Process(context.Background(), event); err != nil {
+		t.Fatalf("first enrichment: %v", err)
+	}
+	if repo.lookups != 1 {
+		t.Fatalf("expected first repository lookup, got %d", repo.lookups)
+	}
+
+	event.EventID = "evt-revision-b"
+	if err := engine.Process(context.Background(), event); err != nil {
+		t.Fatalf("cached enrichment: %v", err)
+	}
+	if repo.lookups != 1 {
+		t.Fatalf("expected cached lookup, got %d repository queries", repo.lookups)
+	}
+
+	repo.revision = repo.revision.Add(time.Second)
+	repo.indicators = nil
+	event.EventID = "evt-revision-c"
+	if err := engine.Process(context.Background(), event); err != nil {
+		t.Fatalf("post-revision enrichment: %v", err)
+	}
+	if repo.lookups != 2 {
+		t.Fatalf("expected cache invalidation after revision change, got %d lookups", repo.lookups)
 	}
 }

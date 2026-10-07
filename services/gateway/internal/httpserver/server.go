@@ -30,6 +30,8 @@ type EventReader interface {
 
 type IntelligenceStore interface {
 	ListIntelligenceIndicators(context.Context, database.IntelligenceIndicatorQuery) ([]enrichment.Indicator, error)
+	ListIntelligenceSources(context.Context) ([]database.ThreatIntelSourceRecord, error)
+	SetIntelligenceSourceEnabled(context.Context, string, bool, string, string) (database.ThreatIntelSourceRecord, error)
 	GetEventEnrichments(context.Context, string) ([]database.EventEnrichmentRecord, error)
 	ListRecentEventEnrichments(context.Context, int) ([]database.EventEnrichmentRecord, error)
 	IntelligenceMetrics(context.Context) (database.IntelligenceMetrics, error)
@@ -105,6 +107,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
 	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
 	s.mux.HandleFunc("GET /api/v1/intelligence/indicators", s.handleIntelligenceIndicators)
+	s.mux.HandleFunc("GET /api/v1/intelligence/sources", s.handleIntelligenceSources)
+	s.mux.HandleFunc("PATCH /api/v1/intelligence/sources/{id}", s.handleIntelligenceSourceState)
 	s.mux.HandleFunc("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches)
 	s.mux.HandleFunc("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics)
 	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
@@ -268,6 +272,78 @@ func (s *Server) handleIntelligenceIndicators(w http.ResponseWriter, r *http.Req
 		"count":      len(indicators),
 		"indicators": indicators,
 	})
+}
+
+func (s *Server) handleIntelligenceSources(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "threat intelligence is unavailable")
+		return
+	}
+
+	sources, err := store.ListIntelligenceSources(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "intelligence sources could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":   len(sources),
+		"sources": sources,
+	})
+}
+
+func (s *Server) handleIntelligenceSourceState(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "threat intelligence is unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	sourceID := strings.TrimSpace(r.PathValue("id"))
+	if sourceID == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_source_id", "intelligence source id is required")
+		return
+	}
+
+	var request struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	if request.Enabled == nil {
+		writeAPIError(w, http.StatusBadRequest, "enabled_required", "enabled is required")
+		return
+	}
+
+	source, err := store.SetIntelligenceSourceEnabled(
+		r.Context(),
+		sourceID,
+		*request.Enabled,
+		actorID,
+		strings.TrimSpace(r.Header.Get("X-Request-ID")),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, database.ErrIntelligenceSourceNotFound):
+			writeAPIError(w, http.StatusNotFound, "intelligence_source_not_found", "intelligence source was not found")
+		case errors.Is(err, database.ErrIntelligenceSourceUnchanged):
+			writeAPIError(w, http.StatusConflict, "intelligence_source_unchanged", "intelligence source already has the requested enabled state")
+		default:
+			writeAPIError(w, http.StatusServiceUnavailable, "update_failed", "intelligence source state could not be updated")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, source)
 }
 
 func (s *Server) handleIntelligenceMatches(w http.ResponseWriter, r *http.Request) {
