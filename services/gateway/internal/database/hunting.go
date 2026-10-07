@@ -91,7 +91,7 @@ func (d *Database) ListHunts(ctx context.Context) ([]hunting.Definition, error) 
 	}
 
 	rows, err := d.pool.Query(ctx, `
-		SELECT id, name, description, hypothesis, query, created_by, created_at, updated_at
+		SELECT id, current_version, name, description, hypothesis, query, created_by, created_at, updated_at
 		FROM hunts
 		ORDER BY created_at DESC, id
 	`)
