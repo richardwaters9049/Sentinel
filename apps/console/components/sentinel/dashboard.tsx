@@ -12,7 +12,6 @@ import {
   FileSearch,
   Fingerprint,
   Gauge,
-  Menu,
   Network,
   Radar,
   Search,
@@ -32,12 +31,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -317,11 +311,7 @@ function MetricCard({
 export default function SentinelDashboard() {
   return (
     <main className="sentinel-grid sentinel-glow min-h-screen bg-[#070a0f] text-slate-100">
-      <div className="mx-auto grid min-h-screen max-w-[1720px] lg:grid-cols-[242px_minmax(0,1fr)]">
-        <aside className="sticky top-0 hidden h-screen border-r border-slate-800/80 bg-[#090d14]/95 px-5 py-6 backdrop-blur-xl lg:block">
-          <SidebarContent />
-        </aside>
-
+      <div className="mx-auto min-h-screen max-w-[1720px]">
         <section className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 xl:px-10">
           <motion.header
             variants={reveal}
@@ -331,35 +321,14 @@ export default function SentinelDashboard() {
             className="mb-6 flex items-center justify-between gap-4"
           >
             <div className="min-w-0">
-              <div className="flex items-center gap-3 lg:hidden">
-                <Sheet>
-                  <SheetTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="cursor-pointer border-slate-800 bg-slate-950/70 text-slate-300 hover:bg-slate-900"
-                      />
-                    }
-                  >
-                    <Menu className="size-4" />
-                  </SheetTrigger>
-                  <SheetContent
-                    side="left"
-                    className="w-[280px] border-slate-800 bg-[#090d14] p-5 text-slate-100"
-                  >
-                    <SheetTitle className="sr-only">
-                      Sentinel navigation
-                    </SheetTitle>
-                    <SidebarContent />
-                  </SheetContent>
-                </Sheet>
-                <span className="text-sm font-bold tracking-[0.12em] text-white">
+              <div className="flex items-center gap-3">
+                <SidebarDrawer />
+                <span className="text-[0.72rem] font-bold tracking-[0.15em] text-slate-500">
                   SENTINEL
                 </span>
               </div>
 
-              <h1 className="mt-3 text-[1.65rem] font-bold leading-[1.18] tracking-[-0.03em] text-white sm:text-[1.9rem] lg:mt-0">
+              <h1 className="mt-3 text-[1.65rem] font-bold leading-[1.18] tracking-[-0.03em] text-white sm:text-[1.9rem]">
                 Security overview
               </h1>
               <p className="mt-1.5 text-[0.78rem] font-medium leading-5 tracking-[0.025em] text-slate-500 sm:text-[0.82rem]">

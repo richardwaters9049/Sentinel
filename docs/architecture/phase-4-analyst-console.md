@@ -211,15 +211,94 @@ This is the first Phase 4 screen that directly renders live persisted Sentinel d
 
 The running screen has been captured back into the Phase 4 Figma file as an editable implementation reference.
 
+## Collapsible navigation drawer
+
+The fixed desktop sidebar has been replaced with the shadcn Drawer component.
+
+The drawer:
+
+- opens from the left on every screen size;
+- can be dismissed to return the full viewport to the active security workspace;
+- preserves the existing Sentinel navigation hierarchy and environment-health panel;
+- uses the same responsive navigation pattern on desktop, tablet, and mobile;
+- keeps route-aware active states;
+- supports swipe/gesture dismissal through the underlying drawer primitive.
+
+This is particularly important for the Environment, Investigation Graph, and Threat Hunt Canvas because those workspaces benefit directly from additional horizontal space.
+
+The component was installed with:
+
+```bash
+bunx --bun shadcn@latest add drawer
+```
+
+## Threat Hunt Canvas
+
+The third signature workspace is now implemented at:
+
+```text
+/hunts
+```
+
+It is wired to the real Phase 3 hunt APIs.
+
+The canvas lets an analyst begin with a human-readable hypothesis and compose typed conditions visually rather than writing SQL or manually constructing JSON.
+
+Current visual condition types include:
+
+- event category;
+- action;
+- outcome;
+- identity;
+- asset;
+- source IP;
+- destination IP;
+- source zone;
+- destination zone;
+- destination port;
+- relative time window.
+
+The visual conditions are compiled into the exact bounded `HuntQuery` model used by the Go backend.
+
+The UI exposes that compiled query alongside the visual composition so the analyst can always see what Sentinel will execute.
+
+The current execution workflow is:
+
+```text
+Hypothesis
+    ↓
+Visual conditions
+    ↓
+Typed HuntQuery
+    ↓
+Save hunt definition
+    ↓
+Execute persisted hunt
+    ↓
+Durable hunt run
+    ↓
+Evidence events
+```
+
+The workspace also lists existing saved hunts from PostgreSQL and allows them to be executed directly.
+
+Returned events show identity, asset, network endpoint, category, action, and source timestamp context.
+
+During this slice, a pre-existing Phase 3 defect in `ListHunts` was found and fixed: the SQL query did not select `current_version` even though the scanner expected it. The endpoint is now verified against the persisted hunt catalogue.
+
+The development console currently sends the existing Phase 3 development actor identity when mutating or executing hunts. This remains a development bridge, not production authentication.
+
+The running Threat Hunt Canvas has been captured into the Phase 4 Figma file as an editable implementation reference.
+
 ## Next frontend work
 
 1. connect the Environment workspace to real asset, identity, finding, and event APIs;
 2. [x] build the Investigation Graph on top of Phase 3 investigations and timelines;
-3. build the Threat Hunt Canvas against the typed saved-hunt API;
+3. [x] build the Threat Hunt Canvas against the typed saved-hunt API;
 4. connect overview metrics and findings to real gateway endpoints;
 5. build findings list/detail and evidence timeline;
 6. extend investigation case-management actions from the graph workspace;
-7. add detection-management controls;
-8. expand loading, empty, failure, and degraded-backend states;
-9. complete responsive and accessibility testing;
-10. add end-to-end analyst workflow tests.
+7. add direct hunt-result → investigation pivoting;
+8. add detection-management controls;
+9. expand loading, empty, failure, and degraded-backend states;
+10. complete responsive/accessibility and end-to-end analyst workflow testing.

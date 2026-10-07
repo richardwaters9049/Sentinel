@@ -100,3 +100,50 @@ export type InvestigationListResponse = {
   count: number;
   investigations: InvestigationSummary[];
 };
+
+export type HuntQuery = {
+  category?: string;
+  categories?: string[];
+  action?: string;
+  actions?: string[];
+  outcome?: string;
+  outcomes?: string[];
+  asset_id?: string;
+  identity_id?: string;
+  source_ip?: string;
+  destination_ip?: string;
+  source_zones?: string[];
+  destination_zone?: string;
+  destination_zones?: string[];
+  destination_ports?: number[];
+  labels?: Record<string, string>;
+  from?: string;
+  to?: string;
+  last_minutes?: number;
+  limit?: number;
+};
+
+export type HuntDefinition = {
+  id: string;
+  version: number;
+  name: string;
+  description: string;
+  hypothesis: string;
+  query: HuntQuery;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HuntListResponse = {
+  count: number;
+  hunts: HuntDefinition[];
+};
+
+export type HuntRunResult = {
+  run_id: number;
+  hunt_id: string;
+  result_count: number;
+  events: EvidenceEvent[];
+  executed_at: string;
+};

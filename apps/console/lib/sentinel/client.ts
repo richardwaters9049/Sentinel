@@ -1,4 +1,8 @@
 import type {
+  HuntDefinition,
+  HuntListResponse,
+  HuntQuery,
+  HuntRunResult,
   InvestigationDetail,
   InvestigationListResponse,
 } from "@/lib/sentinel/types";
@@ -45,4 +49,51 @@ export async function getInvestigation(
     },
   );
   return readJSON<InvestigationDetail>(response);
+}
+
+export async function listHunts(signal?: AbortSignal): Promise<HuntListResponse> {
+  const response = await fetch("/api/sentinel/api/v1/hunts", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<HuntListResponse>(response);
+}
+
+export async function createHunt(
+  input: {
+    name: string;
+    description: string;
+    hypothesis: string;
+    query: HuntQuery;
+  },
+  actorID: string,
+): Promise<HuntDefinition> {
+  const response = await fetch("/api/sentinel/api/v1/hunts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sentinel-Actor": actorID,
+    },
+    body: JSON.stringify(input),
+  });
+  return readJSON<HuntDefinition>(response);
+}
+
+export async function runHunt(
+  id: string,
+  actorID: string,
+  override: HuntQuery = {},
+): Promise<HuntRunResult> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/hunts/${encodeURIComponent(id)}/run`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ override }),
+    },
+  );
+  return readJSON<HuntRunResult>(response);
 }
