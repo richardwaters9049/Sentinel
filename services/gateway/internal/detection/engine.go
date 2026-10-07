@@ -21,6 +21,14 @@ type Repository interface {
 		time.Duration,
 		int,
 	) ([]AuthFailure, error)
+	RecentOTActions(
+		context.Context,
+		string,
+		time.Time,
+		time.Duration,
+		[]string,
+		int,
+	) ([]OTEvent, error)
 	CreateFinding(context.Context, Finding) (bool, error)
 }
 
@@ -41,6 +49,9 @@ func New(repository Repository) *Engine {
 			NewAuthBurstRule(repository),
 			NewServiceAccountLoginRule(),
 			NewCorporateToOTRule(),
+			NewOTParameterChangeRule(),
+			NewOTUnauthorizedCommandRule(),
+			NewOTChangeSequenceRule(repository),
 		},
 	}
 }

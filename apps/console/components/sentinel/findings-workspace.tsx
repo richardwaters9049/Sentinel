@@ -2,7 +2,7 @@
 
 import {
   Activity, AlertTriangle, Bell, CheckCircle2, ChevronRight, Clock3,
-  Crosshair, FilePlus2, Fingerprint, GitBranch, Network, Radar,
+  Cpu, Crosshair, FilePlus2, Fingerprint, GitBranch, Network, Radar,
   RefreshCcw, Search, ShieldAlert, Sparkles,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -93,7 +93,34 @@ function explain(detail: FindingDetail) {
     reasons.push("Identity type observed: " + evidence.identity_type);
   }
   if (typeof evidence.destination_port === "number") {
-    reasons.push("Destination port " + String(evidence.destination_port) + " was part of the evidence");
+    reasons.push(
+      "Destination port " +
+        String(evidence.destination_port) +
+        " was part of the evidence",
+    );
+  }
+  if (typeof evidence.ot_device_type === "string") {
+    reasons.push("OT device type: " + evidence.ot_device_type.toUpperCase());
+  }
+  if (typeof evidence.ot_protocol === "string") {
+    reasons.push("OT protocol context: " + evidence.ot_protocol);
+  }
+  if (typeof evidence.ot_operation === "string") {
+    reasons.push(
+      "Observed OT operation: " + evidence.ot_operation.replaceAll("_", " "),
+    );
+  }
+  if (typeof evidence.ot_authorization === "string") {
+    reasons.push(
+      "Authorization classification: " + evidence.ot_authorization,
+    );
+  }
+  if (typeof evidence.window_seconds === "number") {
+    reasons.push(
+      "Correlated over a " +
+        String(Math.round(evidence.window_seconds / 60)) +
+        "-minute evidence window",
+    );
   }
   if (detail.events.length > 0) {
     reasons.push(
@@ -513,6 +540,53 @@ export default function FindingsWorkspace() {
 
                     <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.45fr)_minmax(330px,0.8fr)]">
                       <div className="grid gap-4">
+                        {detail.detection_id.startsWith("DET-OT-") ? (
+                          <Card className="overflow-hidden rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-300/[0.06] via-[#0c1119] to-rose-400/[0.04] py-0">
+                            <CardHeader className="px-5 pb-4 pt-5">
+                              <div className="flex items-center gap-2">
+                                <Cpu className="size-4 text-amber-200" />
+                                <div>
+                                  <h3 className="text-[0.9rem] font-semibold text-amber-100">
+                                    OT operational-safety context
+                                  </h3>
+                                  <p className="mt-1 text-[0.62rem] leading-5 text-amber-100/45">
+                                    Synthetic Northstar telemetry only. This view
+                                    describes observed metadata and does not imply
+                                    Sentinel can control industrial equipment.
+                                  </p>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <Separator className="bg-amber-300/10" />
+                            <CardContent className="grid gap-2 p-5 sm:grid-cols-2 xl:grid-cols-4">
+                              {[
+                                [detail.evidence.ot_device_type, "device"],
+                                [detail.evidence.ot_protocol, "protocol"],
+                                [detail.evidence.ot_operation, "operation"],
+                                [detail.evidence.safety_impact, "safety impact"],
+                              ]
+                                .filter(
+                                  (item): item is [string, string] =>
+                                    typeof item[0] === "string" &&
+                                    item[0].length > 0,
+                                )
+                                .map(([value, label]) => (
+                                  <div
+                                    key={label}
+                                    className="rounded-xl border border-amber-300/10 bg-slate-950/30 p-3"
+                                  >
+                                    <div className="text-[0.55rem] font-semibold tracking-[0.09em] text-amber-200/40">
+                                      {label.toUpperCase()}
+                                    </div>
+                                    <div className="mt-2 break-words text-[0.68rem] font-medium leading-5 text-amber-100/80">
+                                      {value.replaceAll("_", " ")}
+                                    </div>
+                                  </div>
+                                ))}
+                            </CardContent>
+                          </Card>
+                        ) : null}
+
                         <Card className="surface-card rounded-2xl border-slate-800/85 bg-transparent py-0">
                           <CardHeader className="px-5 pb-4 pt-5">
                             <div className="flex items-center gap-2">
