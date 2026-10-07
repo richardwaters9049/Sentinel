@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3
+.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3
 
 help:
 	@echo "Sentinel development commands"
@@ -10,6 +10,9 @@ help:
 	@echo "  make gateway-vet      Run go vet for the gateway"
 	@echo "  make simulator-run    Run the default synthetic telemetry scenario"
 	@echo "  make simulator-test   Run simulator tests and vet"
+	@echo "  make console-dev      Run the Next.js analyst console"
+	@echo "  make console-lint     Lint the analyst console"
+	@echo "  make console-build    Build the analyst console"
 	@echo "  make test             Run all current tests"
 	@echo "  make fmt              Format Go code"
 	@echo "  make check            Formatting, vet, tests, and race detector"
@@ -50,6 +53,15 @@ simulator-run:
 simulator-test:
 	cd simulator && go test ./...
 	cd simulator && go vet ./...
+
+console-dev:
+	cd apps/console && bun run dev
+
+console-lint:
+	cd apps/console && bun run lint
+
+console-build:
+	cd apps/console && bun run build
 
 test: gateway-test simulator-test
 
