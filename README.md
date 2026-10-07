@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation in progress.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation complete.
 
 The first production-shaped vertical slice is now implemented:
 

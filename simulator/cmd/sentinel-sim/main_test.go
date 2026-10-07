@@ -95,3 +95,51 @@ func TestScenarioEventsIncludesPhaseFiveOTScenarios(t *testing.T) {
 		t.Fatalf("expected safety annotation, got %#v", commandLabels)
 	}
 }
+
+func TestScenarioEventsIncludesExpandedOTInventory(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 18, 30, 0, 0, time.UTC)
+
+	sequence, err := scenarioEvents("ot-change-sequence", start)
+	if err != nil {
+		t.Fatalf("OT change sequence: %v", err)
+	}
+	if len(sequence) != 2 {
+		t.Fatalf("expected two correlated OT events, got %d", len(sequence))
+	}
+	firstAsset, ok := sequence[0]["asset"].(map[string]interface{})
+	if !ok || firstAsset["hostname"] != "plc-sim-02" {
+		t.Fatalf("expected plc-sim-02 mode-change asset, got %#v", sequence[0]["asset"])
+	}
+	secondAsset, ok := sequence[1]["asset"].(map[string]interface{})
+	if !ok || secondAsset["hostname"] != "plc-sim-02" {
+		t.Fatalf("expected plc-sim-02 parameter-change asset, got %#v", sequence[1]["asset"])
+	}
+	firstEvent, ok := sequence[0]["event"].(map[string]interface{})
+	if !ok || firstEvent["action"] != "controller_mode_change" {
+		t.Fatalf("expected controller_mode_change, got %#v", sequence[0]["event"])
+	}
+	secondEvent, ok := sequence[1]["event"].(map[string]interface{})
+	if !ok || secondEvent["action"] != "parameter_change" {
+		t.Fatalf("expected parameter_change, got %#v", sequence[1]["event"])
+	}
+
+	historian, err := scenarioEvents("ot-historian-read-baseline", start)
+	if err != nil {
+		t.Fatalf("historian baseline: %v", err)
+	}
+	historianAsset, ok := historian[0]["asset"].(map[string]interface{})
+	if !ok || historianAsset["hostname"] != "historian-01" || historianAsset["zone"] != "dmz" {
+		t.Fatalf("unexpected historian asset: %#v", historian[0]["asset"])
+	}
+
+	sensor, err := scenarioEvents("ot-sensor-telemetry-baseline", start)
+	if err != nil {
+		t.Fatalf("sensor baseline: %v", err)
+	}
+	sensorAsset, ok := sensor[0]["asset"].(map[string]interface{})
+	if !ok || sensorAsset["hostname"] != "sensor-sim-01" || sensorAsset["zone"] != "ot" {
+		t.Fatalf("unexpected sensor asset: %#v", sensor[0]["asset"])
+	}
+}

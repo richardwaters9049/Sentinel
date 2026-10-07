@@ -51,6 +51,26 @@ function metricFor(
   return metrics.find((metric) => metric.detection_id === detectionID);
 }
 
+function attackMappings(detection: DetectionRecord) {
+  return detection.mitre.flatMap((mapping) => {
+    const framework =
+      typeof mapping.framework === "string" ? mapping.framework : "";
+    const techniqueID =
+      typeof mapping.technique_id === "string" ? mapping.technique_id : "";
+    const technique =
+      typeof mapping.technique === "string" ? mapping.technique : "";
+
+    return framework && techniqueID
+      ? [{ framework, techniqueID, technique }]
+      : [];
+  });
+}
+
+function safetyNote(detection: DetectionRecord) {
+  const value = detection.definition.safety_note;
+  return typeof value === "string" ? value : "";
+}
+
 export default function DetectionsWorkspace() {
   const [detections, setDetections] = useState<DetectionRecord[]>([]);
   const [metrics, setMetrics] = useState<DetectionMetric[]>([]);
@@ -320,6 +340,33 @@ export default function DetectionsWorkspace() {
                           <p className="mt-2 max-w-3xl text-[0.68rem] leading-5 tracking-[0.02em] text-slate-500">
                             {detection.description}
                           </p>
+
+                          {attackMappings(detection).length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {attackMappings(detection).map((mapping) => (
+                                <Badge
+                                  key={
+                                    mapping.framework +
+                                    ":" +
+                                    mapping.techniqueID
+                                  }
+                                  variant="outline"
+                                  className="rounded-md border-violet-400/20 bg-violet-400/[0.05] px-2 py-1 text-[0.55rem] text-violet-300"
+                                >
+                                  {mapping.framework} · {mapping.techniqueID}
+                                  {mapping.technique
+                                    ? " · " + mapping.technique
+                                    : ""}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {safetyNote(detection) ? (
+                            <div className="mt-3 max-w-3xl rounded-xl border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-[0.61rem] leading-5 text-amber-100/55">
+                              {safetyNote(detection)}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/35 px-3 py-2.5">

@@ -86,6 +86,73 @@ func (d *Database) RecentAuthenticationFailures(
 	return failures, nil
 }
 
+func (d *Database) RecentOTActions(
+	ctx context.Context,
+	assetID string,
+	before time.Time,
+	window time.Duration,
+	actions []string,
+	limit int,
+) ([]detection.OTEvent, error) {
+	if d == nil || d.pool == nil {
+		return nil, fmt.Errorf("database is not initialised")
+	}
+	if strings.TrimSpace(assetID) == "" {
+		return nil, fmt.Errorf("asset id is required")
+	}
+	if window <= 0 {
+		return nil, fmt.Errorf("OT correlation window must be greater than zero")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("OT correlation limit must be greater than zero")
+	}
+	if len(actions) == 0 {
+		return nil, fmt.Errorf("at least one OT action is required")
+	}
+
+	normalisedActions := make([]string, 0, len(actions))
+	for _, action := range actions {
+		value := strings.ToLower(strings.TrimSpace(action))
+		if value == "" {
+			continue
+		}
+		normalisedActions = append(normalisedActions, value)
+	}
+	if len(normalisedActions) == 0 {
+		return nil, fmt.Errorf("at least one valid OT action is required")
+	}
+
+	rows, err := d.pool.Query(ctx, `
+		SELECT id, action, source_timestamp
+		FROM events
+		WHERE asset_id = $1
+		  AND category = 'ot'
+		  AND action = ANY($2)
+		  AND source_timestamp < $3
+		  AND source_timestamp >= $3 - ($4 * INTERVAL '1 second')
+		ORDER BY source_timestamp DESC, id DESC
+		LIMIT $5
+	`, assetID, normalisedActions, before.UTC(), int(window.Seconds()), limit)
+	if err != nil {
+		return nil, fmt.Errorf("query recent OT actions: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]detection.OTEvent, 0, limit)
+	for rows.Next() {
+		var event detection.OTEvent
+		if err := rows.Scan(&event.EventID, &event.Action, &event.Timestamp); err != nil {
+			return nil, fmt.Errorf("scan recent OT action: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent OT actions: %w", err)
+	}
+
+	return events, nil
+}
+
 func (d *Database) CreateFinding(ctx context.Context, finding detection.Finding) (bool, error) {
 	if d == nil || d.pool == nil {
 		return false, fmt.Errorf("database is not initialised")

@@ -50,6 +50,17 @@ func (f *fakeRepository) RecentAuthenticationFailures(
 	return f.failures, f.queryErr
 }
 
+func (f *fakeRepository) RecentOTActions(
+	_ context.Context,
+	_ string,
+	_ time.Time,
+	_ time.Duration,
+	_ []string,
+	_ int,
+) ([]OTEvent, error) {
+	return nil, nil
+}
+
 func (f *fakeRepository) CreateFinding(_ context.Context, finding Finding) (bool, error) {
 	if f.createErr != nil {
 		return false, f.createErr

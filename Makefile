@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5
+.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5
 
 help:
 	@echo "Sentinel development commands"
@@ -31,6 +31,7 @@ help:
 	@echo "  make workflow-phase4   Run the Phase 4 analyst-console workflow smoke test"
 	@echo "  make final-phase4      Run the complete Phase 4 regression suite"
 	@echo "  make smoke-phase5      Run the Phase 5 OT simulation vertical slice"
+	@echo "  make final-phase5      Run the complete Phase 5 regression suite"
 
 dev-up:
 	docker compose up -d
@@ -123,3 +124,6 @@ final-phase4:
 
 smoke-phase5:
 	./scripts/phase5-ot-smoke.sh
+
+final-phase5:
+	./scripts/phase5-final-regression.sh

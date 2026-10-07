@@ -83,6 +83,23 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			otUnauthorizedCommandEvent(start),
 		}, nil
+	case "ot-controller-mode-change":
+		return []map[string]interface{}{
+			otControllerModeChangeEvent(start),
+		}, nil
+	case "ot-change-sequence":
+		return []map[string]interface{}{
+			otControllerModeChangeEvent(start),
+			otPLC02ParameterChangeEvent(start.Add(90 * time.Second)),
+		}, nil
+	case "ot-historian-read-baseline":
+		return []map[string]interface{}{
+			otHistorianReadEvent(start),
+		}, nil
+	case "ot-sensor-telemetry-baseline":
+		return []map[string]interface{}{
+			otSensorTelemetryEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -330,6 +347,123 @@ func otUnauthorizedCommandEvent(timestamp time.Time) map[string]interface{} {
 			"ot.operation":     "write_request",
 			"ot.authorized":    "false",
 			"ot.safety_impact": "potential_process_impact",
+			"ot.simulated":     "true",
+		},
+	}
+}
+
+func otControllerModeChangeEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-plc-sim-02",
+			"hostname": "plc-sim-02",
+			"zone":     "ot",
+		},
+		"actor": map[string]interface{}{
+			"id":   "user-demo-engineer",
+			"type": "human",
+			"name": "Demo Engineer",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "controller_mode_change",
+			"outcome":  "success",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-controller-mode-change",
+			"ot.device_type":   "plc",
+			"ot.protocol":      "modbus-tcp",
+			"ot.operation":     "mode_change",
+			"ot.authorized":    "true",
+			"ot.safety_impact": "potential_process_impact",
+			"ot.simulated":     "true",
+		},
+	}
+}
+
+func otPLC02ParameterChangeEvent(timestamp time.Time) map[string]interface{} {
+	event := otPLCParameterChangeEvent(timestamp)
+	event["asset"] = map[string]interface{}{
+		"id":       "asset-plc-sim-02",
+		"hostname": "plc-sim-02",
+		"zone":     "ot",
+	}
+	labels := event["labels"].(map[string]string)
+	labels["scenario"] = "ot-change-sequence"
+	return event
+}
+
+func otHistorianReadEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-historian-01",
+			"hostname": "historian-01",
+			"zone":     "dmz",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "historian_read",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.20.0.40",
+			"destination_ip":   "10.30.0.60",
+			"destination_port": 443,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-historian-read-baseline",
+			"ot.device_type":   "historian",
+			"ot.protocol":      "https",
+			"ot.operation":     "timeseries_read",
+			"ot.authorized":    "true",
+			"ot.safety_impact": "none",
+			"ot.simulated":     "true",
+		},
+	}
+}
+
+func otSensorTelemetryEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-sensor-sim-01",
+			"hostname": "sensor-sim-01",
+			"zone":     "ot",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "sensor_telemetry",
+			"outcome":  "success",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-sensor-telemetry-baseline",
+			"ot.device_type":   "sensor",
+			"ot.protocol":      "telemetry",
+			"ot.operation":     "sample",
+			"ot.authorized":    "true",
+			"ot.safety_impact": "none",
 			"ot.simulated":     "true",
 		},
 	}

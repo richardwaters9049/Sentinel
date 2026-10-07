@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-5-ot-simulation
@@ -10,25 +10,55 @@ feat/phase-5-ot-simulation
 
 ## Objective
 
-Phase 5 extends Sentinel's synthetic Northstar Energy lab with safe operational-technology telemetry and explainable defensive detections.
+Phase 5 extends Sentinel's synthetic Northstar Energy lab with safe operational-technology telemetry, richer OT asset context, deterministic detections, and bounded temporal correlation.
 
 This phase remains simulation-only.
 
-Sentinel must not connect to real controllers, alter industrial equipment, or generate operational command sequences. OT behaviour is represented as normalised metadata events that analysts can inspect, hunt, correlate, and investigate.
+Sentinel does not connect to real controllers, alter industrial equipment, or generate operational command sequences. OT behaviour is represented as normalised metadata events that analysts can inspect, hunt, correlate, and investigate.
 
-## First vertical slice
+## Northstar OT scenario catalogue
 
-The first Phase 5 slice adds three deterministic simulator scenarios:
+Phase 5 now includes:
 
 ```text
 ot-hmi-read-baseline
+ot-historian-read-baseline
+ot-sensor-telemetry-baseline
+ot-controller-mode-change
 ot-plc-parameter-change
 ot-unauthorized-command
+ot-change-sequence
 ```
 
-The baseline represents expected HMI/controller observation and must not create an OT finding.
+The normal-behaviour fixtures model expected OT observation without creating OT findings:
 
-The parameter-change and unauthorized-message scenarios represent suspicious **telemetry observations** only. They include descriptive labels such as:
+- HMI read activity;
+- historian read activity;
+- sensor telemetry;
+- a standalone controller mode change.
+
+The suspicious scenarios model metadata observations only:
+
+- controller parameter change;
+- explicitly unauthorized command message;
+- controller mode change followed by parameter change on the same asset.
+
+## Northstar OT asset inventory
+
+Phase 5 exercises:
+
+- engineering-workstation-01;
+- hmi-01;
+- historian-01;
+- plc-sim-01;
+- plc-sim-02;
+- sensor-sim-01.
+
+All are fictional, local, and synthetic.
+
+## OT metadata
+
+Phase 5 keeps the event schema stable by carrying OT-specific context through bounded string labels:
 
 ```text
 ot.device_type
@@ -39,17 +69,13 @@ ot.safety_impact
 ot.simulated
 ```
 
-These labels keep the existing telemetry schema stable while allowing Phase 5 to carry OT-specific context.
+Every Phase 5 simulator event includes:
 
-## Northstar OT assets
+```text
+ot.simulated = true
+```
 
-The first slice uses the existing fictional Northstar OT model:
-
-- engineering-workstation-01;
-- hmi-01;
-- plc-sim-01.
-
-Additional simulated assets can be added in later Phase 5 slices, including plc-sim-02 and sensor-sim-01.
+Suspicious observations also carry a high-level safety-impact classification.
 
 ## Detection catalogue
 
@@ -89,56 +115,109 @@ ATT&CK for ICS context:
 
 - T1692.001 — Unauthorized Message: Command Message.
 
-The ATT&CK mappings describe analyst context. A Sentinel finding is evidence that the deterministic telemetry conditions matched; it is not proof of malicious intent.
+### DET-OT-003 — Controller Mode Change Followed by Parameter Change
 
-## Safety annotations
+This is Phase 5's first OT temporal-correlation rule.
 
-Every Phase 5 simulator event includes:
+The terminal event must be an OT parameter change. Sentinel then queries only the same asset for recent OT `controller_mode_change` events.
 
-```text
-ot.simulated = true
-```
+The query is bounded to:
 
-Suspicious OT observations also carry a high-level safety-impact classification.
+- the preceding 10 minutes;
+- category `ot`;
+- action `controller_mode_change`;
+- the same `asset_id`;
+- at most eight candidate events.
 
-The simulator deliberately models event metadata rather than process-control instructions or device payloads.
+Finding:
+
+- severity: critical;
+- confidence: 94;
+- evidence includes both sides of the correlated sequence in chronological order.
+
+ATT&CK for ICS context:
+
+- T0836 — Modify Parameter.
+
+The mappings describe analyst context. A Sentinel finding means the deterministic telemetry conditions matched; it is not proof of malicious intent.
 
 ## Explainable evidence
 
-Phase 5 extends finding evidence with OT-specific fields:
+Phase 5 findings preserve OT-specific evidence including:
 
-- OT protocol family;
+- protocol family;
 - device type;
 - high-level operation;
 - authorization classification;
-- safety-impact annotation.
+- safety-impact annotation;
+- correlation window;
+- linked event IDs.
 
-This context flows into the existing finding, hunt, investigation, and analyst-console workflows.
+This context flows through the existing finding, hunt, investigation, and analyst-console workflows.
+
+## Analyst console
+
+Phase 5 extends the Phase 4 console rather than creating another standalone dashboard.
+
+The Findings workspace now shows an OT operational-safety panel for `DET-OT-*` findings with:
+
+- device type;
+- protocol;
+- operation;
+- safety-impact annotation;
+- clear synthetic-lab wording.
+
+Finding explainability also includes OT protocol, device, operation, authorization, and correlation-window details when present.
+
+The Detection Engineering workspace now displays persisted ATT&CK / ATT&CK for ICS mappings and any safety note stored in a detection definition.
+
+## Regression isolation
+
+The Phase 5 smoke test uses its own temporary NATS JetStream container and ports.
+
+This matters because local development gateways share the normal telemetry durable consumer. Without an isolated NATS instance, another running gateway can legally consume a smoke-test message first, causing nondeterministic test results.
+
+The temporary JetStream container is removed automatically when the test exits.
 
 ## Verification
 
-The initial Phase 5 smoke test is:
+Phase 5 provides:
+
+```text
+scripts/phase5-ot-smoke.sh
+scripts/phase5-final-regression.sh
+```
+
+and Make targets:
 
 ```bash
 make smoke-phase5
+make final-phase5
 ```
 
-It verifies:
+The OT smoke test verifies:
 
-1. both OT detections are present and enabled;
+1. DET-OT-001, DET-OT-002, and DET-OT-003 are present and enabled;
 2. ATT&CK for ICS mappings are persisted;
-3. the normal HMI baseline does not create an OT finding;
+3. normal HMI, historian, sensor, and standalone mode-change telemetry do not create OT findings;
 4. parameter-change telemetry creates DET-OT-001;
 5. unauthorized-message telemetry creates DET-OT-002;
-6. OT-specific evidence is preserved;
-7. OT events are queryable through the normal event API;
-8. all simulator events are explicitly marked synthetic.
+6. a mode-change → parameter-change sequence creates DET-OT-003;
+7. OT-specific evidence and correlation windows are preserved;
+8. the expanded OT asset inventory is persisted;
+9. OT events remain queryable through the normal event API;
+10. all Phase 5 simulator events are explicitly marked synthetic.
 
-## Remaining Phase 5 work
+The final Phase 5 regression runs the complete Phase 4 regression baseline first and then the full OT smoke suite.
 
-- broaden the fictional OT asset inventory;
-- add controller mode-change and historian interaction scenarios;
-- add operational-safety annotations to the analyst UI;
-- add richer normal-behaviour fixtures to protect against noisy rules;
-- expose ATT&CK for ICS mappings in finding and detection detail views;
-- add a complete Phase 5 regression suite once the OT scenario catalogue is mature.
+## Phase 5 completion criteria
+
+- [x] broaden the fictional OT asset inventory;
+- [x] add controller mode-change and historian interaction scenarios;
+- [x] add sensor and other normal-behaviour fixtures;
+- [x] add operational-safety annotations to the analyst UI;
+- [x] expose ATT&CK for ICS mappings in detection detail;
+- [x] add explainable OT finding context;
+- [x] add a bounded temporal OT correlation;
+- [x] isolate OT smoke testing from local NATS consumers;
+- [x] add a complete Phase 5 regression suite.

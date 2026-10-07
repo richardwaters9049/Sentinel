@@ -13,6 +13,8 @@ const (
 	OTParameterChangeVersion       = 1
 	OTUnauthorizedCommandID        = "DET-OT-002"
 	OTUnauthorizedCommandVersion   = 1
+	OTChangeSequenceDetectionID    = "DET-OT-003"
+	OTChangeSequenceVersion        = 1
 )
 
 type Evidence struct {
@@ -51,5 +53,11 @@ type Finding struct {
 
 type AuthFailure struct {
 	EventID   string
+	Timestamp time.Time
+}
+
+type OTEvent struct {
+	EventID   string
+	Action    string
 	Timestamp time.Time
 }
