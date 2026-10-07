@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
@@ -25,6 +26,13 @@ type TelemetryIngestor interface {
 
 type EventReader interface {
 	ListEvents(context.Context, database.EventQuery) ([]telemetry.Event, error)
+}
+
+type IntelligenceStore interface {
+	ListIntelligenceIndicators(context.Context, database.IntelligenceIndicatorQuery) ([]enrichment.Indicator, error)
+	GetEventEnrichments(context.Context, string) ([]database.EventEnrichmentRecord, error)
+	ListRecentEventEnrichments(context.Context, int) ([]database.EventEnrichmentRecord, error)
+	IntelligenceMetrics(context.Context) (database.IntelligenceMetrics, error)
 }
 
 type AnalystStore interface {
@@ -96,6 +104,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/v1/findings/{id}/status", s.handleFindingStatus)
 	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
 	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
+	s.mux.HandleFunc("GET /api/v1/intelligence/indicators", s.handleIntelligenceIndicators)
+	s.mux.HandleFunc("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches)
+	s.mux.HandleFunc("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics)
+	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
 	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
 	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
 	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
@@ -211,6 +223,121 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"count":  len(events),
 		"events": events,
+	})
+}
+
+func (s *Server) handleIntelligenceIndicators(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "threat intelligence is unavailable")
+		return
+	}
+
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 200 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_query", "limit must be between 1 and 200")
+			return
+		}
+		limit = parsed
+	}
+
+	indicatorType := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
+	switch indicatorType {
+	case "", "ip", "domain", "sha256":
+	default:
+		writeAPIError(w, http.StatusBadRequest, "invalid_query", "type must be ip, domain, or sha256")
+		return
+	}
+
+	indicators, err := store.ListIntelligenceIndicators(
+		r.Context(),
+		database.IntelligenceIndicatorQuery{
+			Limit:         limit,
+			IndicatorType: indicatorType,
+			Value:         strings.TrimSpace(r.URL.Query().Get("value")),
+		},
+	)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "threat indicators could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":      len(indicators),
+		"indicators": indicators,
+	})
+}
+
+func (s *Server) handleIntelligenceMatches(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "threat intelligence is unavailable")
+		return
+	}
+
+	limit := 50
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 200 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_query", "limit must be between 1 and 200")
+			return
+		}
+		limit = parsed
+	}
+
+	matches, err := store.ListRecentEventEnrichments(r.Context(), limit)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "enrichment matches could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":   len(matches),
+		"matches": matches,
+	})
+}
+
+func (s *Server) handleIntelligenceMetrics(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "threat intelligence is unavailable")
+		return
+	}
+
+	metrics, err := store.IntelligenceMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "intelligence metrics could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (s *Server) handleEventEnrichments(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(IntelligenceStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "intelligence_unavailable", "event enrichment is unavailable")
+		return
+	}
+
+	eventID := strings.TrimSpace(r.PathValue("id"))
+	if eventID == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_event_id", "event id is required")
+		return
+	}
+
+	enrichments, err := store.GetEventEnrichments(r.Context(), eventID)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "event enrichments could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"event_id":    eventID,
+		"count":       len(enrichments),
+		"enrichments": enrichments,
 	})
 }
 

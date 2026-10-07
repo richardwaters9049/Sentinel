@@ -20,6 +20,20 @@ type EventProcessor interface {
 	Process(context.Context, Event) error
 }
 
+type ProcessorChain []EventProcessor
+
+func (chain ProcessorChain) Process(ctx context.Context, event Event) error {
+	for index, processor := range chain {
+		if processor == nil {
+			continue
+		}
+		if err := processor.Process(ctx, event); err != nil {
+			return fmt.Errorf("processor %d: %w", index, err)
+		}
+	}
+	return nil
+}
+
 type permanentError struct {
 	err error
 }

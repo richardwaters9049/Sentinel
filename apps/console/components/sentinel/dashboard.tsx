@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   Bell,
+  Binary,
   CheckCircle2,
   ChevronRight,
   Crosshair,
@@ -53,6 +54,7 @@ const navItems = [
   { label: "Hunts", icon: Crosshair, href: "/hunts" },
   { label: "Investigations", icon: FileSearch, href: "/investigations" },
   { label: "Detections", icon: Radar, href: "/detections" },
+  { label: "Intelligence", icon: Binary, href: "/intelligence" },
 ];
 
 const reveal = {

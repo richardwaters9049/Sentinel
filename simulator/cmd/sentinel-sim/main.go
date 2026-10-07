@@ -100,6 +100,10 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			otSensorTelemetryEvent(start),
 		}, nil
+	case "intel-ioc-match":
+		return []map[string]interface{}{
+			intelligenceIOCMatchEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -465,6 +469,39 @@ func otSensorTelemetryEvent(timestamp time.Time) map[string]interface{} {
 			"ot.authorized":    "true",
 			"ot.safety_impact": "none",
 			"ot.simulated":     "true",
+		},
+	}
+}
+
+func intelligenceIOCMatchEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "network",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-network-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-intel-01",
+			"hostname": "workstation-intel-01",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "network",
+			"action":   "connection",
+			"outcome":  "observed",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.0.25",
+			"destination_ip":   "198.51.100.66",
+			"destination_port": 443,
+			"destination_zone": "external",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "intel-ioc-match",
+			"simulated":   "true",
 		},
 	}
 }

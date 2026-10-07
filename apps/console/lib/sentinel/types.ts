@@ -260,3 +260,59 @@ export type DetectionMetricsResponse = {
   count: number;
   metrics: DetectionMetric[];
 };
+
+
+export type IntelligenceIndicator = {
+  id: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  indicator_type: "ip" | "domain" | "sha256";
+  value: string;
+  normalized_value: string;
+  source_confidence: number;
+  confidence: number;
+  valid_from: string;
+  valid_until?: string;
+  tags: string[];
+  context: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+};
+
+export type IntelligenceIndicatorListResponse = {
+  count: number;
+  indicators: IntelligenceIndicator[];
+};
+
+export type EventEnrichment = {
+  id: number;
+  event_id: string;
+  indicator_id: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  indicator_type: string;
+  indicator_value: string;
+  event_field: string;
+  observed_value: string;
+  source_confidence: number;
+  indicator_confidence: number;
+  effective_confidence: number;
+  tags: string[];
+  context: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  matched_at: string;
+};
+
+export type IntelligenceMatchListResponse = {
+  count: number;
+  matches: EventEnrichment[];
+};
+
+export type IntelligenceMetrics = {
+  active_sources: number;
+  active_indicators: number;
+  enriched_events: number;
+  total_matches: number;
+  high_confidence_hits: number;
+};

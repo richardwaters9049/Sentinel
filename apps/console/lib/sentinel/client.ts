@@ -14,6 +14,9 @@ import type {
   HuntRunResult,
   InvestigationDetail,
   InvestigationListResponse,
+  IntelligenceIndicatorListResponse,
+  IntelligenceMatchListResponse,
+  IntelligenceMetrics,
 } from "@/lib/sentinel/types";
 
 type APIErrorPayload = {
@@ -220,6 +223,44 @@ export async function setDetectionEnabled(
     },
   );
   return readJSON<DetectionRecord>(response);
+}
+
+
+export async function listIntelligenceIndicators(
+  signal?: AbortSignal,
+): Promise<IntelligenceIndicatorListResponse> {
+  const response = await fetch(
+    "/api/sentinel/api/v1/intelligence/indicators?limit=100",
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<IntelligenceIndicatorListResponse>(response);
+}
+
+export async function listIntelligenceMatches(
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<IntelligenceMatchListResponse> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/intelligence/matches?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<IntelligenceMatchListResponse>(response);
+}
+
+export async function getIntelligenceMetrics(
+  signal?: AbortSignal,
+): Promise<IntelligenceMetrics> {
+  const response = await fetch("/api/sentinel/api/v1/intelligence/metrics", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<IntelligenceMetrics>(response);
 }
 
 export async function getAssetPivot(

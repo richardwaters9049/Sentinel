@@ -143,3 +143,29 @@ func TestScenarioEventsIncludesExpandedOTInventory(t *testing.T) {
 		t.Fatalf("unexpected sensor asset: %#v", sensor[0]["asset"])
 	}
 }
+
+func TestScenarioEventsIncludesIntelligenceIOCMatch(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	events, err := scenarioEvents("intel-ioc-match", start)
+	if err != nil {
+		t.Fatalf("intel IOC scenario: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+
+	network, ok := events[0]["network"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected network payload, got %#v", events[0]["network"])
+	}
+	if network["destination_ip"] != "198.51.100.66" {
+		t.Fatalf("unexpected IOC destination: %#v", network["destination_ip"])
+	}
+
+	labels, ok := events[0]["labels"].(map[string]string)
+	if !ok || labels["scenario"] != "intel-ioc-match" || labels["simulated"] != "true" {
+		t.Fatalf("unexpected intelligence labels: %#v", events[0]["labels"])
+	}
+}
