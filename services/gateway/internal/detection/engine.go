@@ -41,6 +41,8 @@ func New(repository Repository) *Engine {
 			NewAuthBurstRule(repository),
 			NewServiceAccountLoginRule(),
 			NewCorporateToOTRule(),
+			NewOTParameterChangeRule(),
+			NewOTUnauthorizedCommandRule(),
 		},
 	}
 }

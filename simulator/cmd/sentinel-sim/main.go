@@ -71,6 +71,18 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			corporateToOTEvent(start),
 		}, nil
+	case "ot-hmi-read-baseline":
+		return []map[string]interface{}{
+			otHMIReadEvent(start),
+		}, nil
+	case "ot-plc-parameter-change":
+		return []map[string]interface{}{
+			otPLCParameterChangeEvent(start),
+		}, nil
+	case "ot-unauthorized-command":
+		return []map[string]interface{}{
+			otUnauthorizedCommandEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -195,6 +207,130 @@ func corporateToOTEvent(timestamp time.Time) map[string]interface{} {
 		"labels": map[string]string{
 			"environment": "lab",
 			"scenario":    "it-to-ot-connection",
+		},
+	}
+}
+
+func otHMIReadEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-hmi-01",
+			"hostname": "hmi-01",
+			"zone":     "ot",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "telemetry_read",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.30.0.10",
+			"destination_ip":   "10.30.0.40",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-hmi-read-baseline",
+			"ot.device_type":   "plc",
+			"ot.protocol":      "modbus-tcp",
+			"ot.operation":     "read_register",
+			"ot.authorized":    "true",
+			"ot.safety_impact": "none",
+			"ot.simulated":     "true",
+		},
+	}
+}
+
+func otPLCParameterChangeEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-plc-sim-01",
+			"hostname": "plc-sim-01",
+			"zone":     "ot",
+		},
+		"actor": map[string]interface{}{
+			"id":   "user-demo-engineer",
+			"type": "human",
+			"name": "Demo Engineer",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "parameter_change",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.30.0.20",
+			"destination_ip":   "10.30.0.40",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-plc-parameter-change",
+			"ot.device_type":   "plc",
+			"ot.protocol":      "modbus-tcp",
+			"ot.operation":     "setpoint_change",
+			"ot.authorized":    "true",
+			"ot.safety_impact": "potential_process_impact",
+			"ot.simulated":     "true",
+		},
+	}
+}
+
+func otUnauthorizedCommandEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "ot",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-ot-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-engineering-ws-01",
+			"hostname": "engineering-workstation-01",
+			"zone":     "ot",
+		},
+		"actor": map[string]interface{}{
+			"id":   "user-demo-engineer",
+			"type": "human",
+			"name": "Demo Engineer",
+		},
+		"event": map[string]interface{}{
+			"category": "ot",
+			"action":   "command_message",
+			"outcome":  "observed",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.30.0.20",
+			"destination_ip":   "10.30.0.40",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment":      "lab",
+			"scenario":         "ot-unauthorized-command",
+			"ot.device_type":   "plc",
+			"ot.protocol":      "modbus-tcp",
+			"ot.operation":     "write_request",
+			"ot.authorized":    "false",
+			"ot.safety_impact": "potential_process_impact",
+			"ot.simulated":     "true",
 		},
 	}
 }

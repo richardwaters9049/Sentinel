@@ -9,6 +9,10 @@ const (
 	ServiceAccountLoginVersion     = 1
 	CorporateToOTDetectionID       = "DET-NET-001"
 	CorporateToOTDetectionVersion  = 1
+	OTParameterChangeDetectionID   = "DET-OT-001"
+	OTParameterChangeVersion       = 1
+	OTUnauthorizedCommandID        = "DET-OT-002"
+	OTUnauthorizedCommandVersion   = 1
 )
 
 type Evidence struct {
@@ -23,6 +27,11 @@ type Evidence struct {
 	WindowSeconds   int      `json:"window_seconds,omitempty"`
 	SuccessEventID  string   `json:"success_event_id,omitempty"`
 	TerminalEventID string   `json:"terminal_event_id,omitempty"`
+	OTProtocol      string   `json:"ot_protocol,omitempty"`
+	OTDeviceType    string   `json:"ot_device_type,omitempty"`
+	OTOperation     string   `json:"ot_operation,omitempty"`
+	OTAuthorization string   `json:"ot_authorization,omitempty"`
+	SafetyImpact    string   `json:"safety_impact,omitempty"`
 }
 
 type Finding struct {
