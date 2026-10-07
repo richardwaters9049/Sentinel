@@ -13,6 +13,7 @@ import {
   Fingerprint,
   Gauge,
   Menu,
+  Network,
   Radar,
   Search,
   ShieldCheck,
@@ -21,6 +22,8 @@ import {
   Workflow,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -39,13 +42,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Overview", icon: Gauge, active: true },
-  { label: "Findings", icon: AlertTriangle },
-  { label: "Hunts", icon: Crosshair },
-  { label: "Investigations", icon: FileSearch },
-  { label: "Assets & identities", icon: Fingerprint },
-  { label: "Detections", icon: Radar },
-  { label: "Telemetry", icon: Activity },
+  { label: "Overview", icon: Gauge, href: "/" },
+  { label: "Environment", icon: Network, href: "/environment" },
+  { label: "Findings", icon: AlertTriangle, href: "/findings" },
+  { label: "Hunts", icon: Crosshair, href: "/hunts" },
+  { label: "Investigations", icon: FileSearch, href: "/investigations" },
+  { label: "Assets & identities", icon: Fingerprint, href: "/entities" },
+  { label: "Detections", icon: Radar, href: "/detections" },
+  { label: "Telemetry", icon: Activity, href: "/telemetry" },
 ];
 
 const metrics = [
@@ -194,7 +198,9 @@ function SeverityBadge({
   );
 }
 
-function SidebarContent() {
+export function SidebarContent() {
+  const pathname = usePathname();
+
   return (
     <div className="flex h-full flex-col">
       <div className="mb-7 flex items-center gap-3">
@@ -218,13 +224,16 @@ function SidebarContent() {
       <nav className="space-y-1.5">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const active =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+
           return (
-            <button
+            <Link
               key={item.label}
-              type="button"
+              href={item.href}
               className={cn(
                 "group flex w-full cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-[0.88rem] font-medium tracking-[0.015em] transition duration-200",
-                item.active
+                active
                   ? "border-sky-400/20 bg-gradient-to-r from-sky-500/20 to-violet-500/15 text-slate-50"
                   : "border-transparent text-slate-400 hover:border-slate-800 hover:bg-slate-900/55 hover:text-slate-100",
               )}
@@ -232,13 +241,13 @@ function SidebarContent() {
               <Icon
                 className={cn(
                   "size-[1.05rem] transition",
-                  item.active
+                  active
                     ? "text-sky-300"
                     : "text-slate-600 group-hover:text-slate-300",
                 )}
               />
               {item.label}
-            </button>
+            </Link>
           );
         })}
       </nav>

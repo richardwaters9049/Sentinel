@@ -90,14 +90,51 @@ bun run build
 
 Both currently pass.
 
+## Product direction
+
+Phase 4 is deliberately moving beyond a conventional dashboard.
+
+The dashboard remains the entry point, but Sentinel's defining analyst experiences are now:
+
+1. **Environment Graph** — a live logical view of Corporate IT, Security/DMZ, and OT assets.
+2. **Investigation Graph** — evidence relationships between identities, assets, events, findings, and detections.
+3. **Threat Hunt Canvas** — a visual way to build and execute the typed hunt model from Phase 3.
+4. **Incident Replay** — chronological reconstruction of suspicious activity using persisted evidence.
+
+These surfaces are intended to make Sentinel feel like a cyber-investigation instrument rather than a generic admin application.
+
+## Environment workspace
+
+The first signature workspace is now implemented at:
+
+```text
+/environment
+```
+
+It includes:
+
+- Corporate IT, DMZ, and OT security zones;
+- interactive asset nodes;
+- node state and finding indicators;
+- selected-asset inspection;
+- identity association;
+- visual path highlighting;
+- an explainability panel showing why Sentinel flagged the activity;
+- incident replay controls;
+- step-by-step evidence progression;
+- animated attack-path movement using Framer Motion;
+- responsive behaviour for smaller screens.
+
+The running implementation has also been captured back into the Phase 4 Figma file as an editable reference frame.
+
 ## Next frontend work
 
-1. extract the dashboard into reusable application-shell components;
-2. connect overview metrics and findings to real gateway endpoints;
-3. build findings list/detail and evidence timeline;
-4. build hunts and hunt-builder screens;
-5. build investigations and timeline screens;
-6. add asset/identity pivot screens;
+1. connect the Environment workspace to real asset, identity, finding, and event APIs;
+2. build the Investigation Graph on top of Phase 3 pivots and investigation timelines;
+3. build the Threat Hunt Canvas against the typed saved-hunt API;
+4. connect overview metrics and findings to real gateway endpoints;
+5. build findings list/detail and evidence timeline;
+6. build investigations and case-management views;
 7. add detection-management controls;
 8. add loading, empty, failure, and degraded-backend states;
 9. complete responsive and accessibility testing;
