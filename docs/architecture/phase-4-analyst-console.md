@@ -418,13 +418,85 @@ A local end-to-end mutation check through the Next.js proxy verified:
 
 The updated case-management workspace has been captured back into the Phase 4 Figma file.
 
+## Findings analysis workspace
+
+The dedicated Findings workspace is now implemented at:
+
+```text
+/findings
+```
+
+It is backed by the real Phase 2 finding APIs and provides an analyst-facing bridge from detection output into hunting and investigation.
+
+The workspace loads:
+
+- the persisted findings list;
+- finding detail with directly linked evidence;
+- nearby contextual events using the bounded evidence window;
+- finding audit history.
+
+The evidence timeline distinguishes:
+
+- direct evidence explicitly linked to the finding;
+- contextual events involving the same assets or identities around the finding window.
+
+Analysts can switch the context window between:
+
+```text
+Direct
+±5 minutes
+±15 minutes
+±30 minutes
+```
+
+The detail view also exposes explainability derived from persisted finding evidence and linked events instead of presenting the detection as an opaque alert.
+
+Finding workflow actions mirror the backend state machine and only expose valid transitions:
+
+```text
+new
+ ↓
+triaged
+ ├─→ false_positive
+ ├─→ benign_expected
+ ├─→ duplicate
+ └─→ investigating
+       ├─→ false_positive
+       ├─→ benign_expected
+       ├─→ duplicate
+       └─→ confirmed
+             ├─→ closed
+             └─→ contained
+                    ↓
+                  closed
+```
+
+The workspace also supports two direct escalation paths:
+
+1. **Start investigation** — creates a persisted investigation containing the finding and all directly linked evidence events, then opens the exact Investigation Graph.
+2. **Hunt related activity** — opens the Threat Hunt Canvas prefilled from the finding's category, identity, asset, title, and finding ID.
+
+Identity and asset chips in the Finding view can also open targeted prefilled hunts.
+
+A local end-to-end verification through the Next.js proxy confirmed:
+
+- finding detail loading;
+- evidence-context loading;
+- a real `new → triaged` workflow transition;
+- persisted audit history for `finding.status_changed`;
+- creation of an investigation containing one finding and five linked evidence events;
+- successful loading of the Findings route;
+- successful loading of a finding-prefilled Hunt Canvas route.
+
+The Findings workspace has been captured into the Phase 4 Figma file as an editable implementation reference.
+
 ## Next frontend work
 
 1. [x] connect the Environment workspace to real asset, identity, finding, and event APIs;
 2. [x] build the Investigation Graph on top of Phase 3 investigations and timelines;
 3. [x] build the Threat Hunt Canvas against the typed saved-hunt API;
 4. connect overview metrics and findings to real gateway endpoints;
-5. build findings list/detail and evidence timeline;
+5. [x] build findings list/detail, explainability, evidence timeline, and escalation pivots;
 6. [x] extend investigation case-management actions from the graph workspace;
 7. [x] add direct hunt-result → investigation pivoting;
 8. add detection-management controls;

@@ -10,6 +10,17 @@ export type InvestigationSummary = {
   updated_at: string;
 };
 
+export type FindingStatus =
+  | "new"
+  | "triaged"
+  | "investigating"
+  | "false_positive"
+  | "benign_expected"
+  | "duplicate"
+  | "confirmed"
+  | "contained"
+  | "closed";
+
 export type Finding = {
   id: string;
   detection_id: string;
@@ -17,7 +28,7 @@ export type Finding = {
   title: string;
   severity: string;
   confidence: number;
-  status: string;
+  status: FindingStatus;
   first_observed_at: string;
   last_observed_at: string;
   evidence: Record<string, unknown>;
@@ -191,6 +202,18 @@ export type EventListResponse = {
 export type FindingListResponse = {
   count: number;
   findings: Finding[];
+};
+
+export type FindingDetail = Finding & {
+  events: EvidenceEvent[];
+  audit: AuditRecord[];
+};
+
+export type FindingEvidenceContext = {
+  finding_id: string;
+  linked_events: EvidenceEvent[];
+  context_events: EvidenceEvent[];
+  context_minutes: number;
 };
 
 export type AssetPivot = {

@@ -1,7 +1,10 @@
 import type {
   AssetPivot,
   EventListResponse,
+  FindingDetail,
+  FindingEvidenceContext,
   FindingListResponse,
+  FindingStatus,
   HuntDefinition,
   HuntListResponse,
   HuntQuery,
@@ -127,6 +130,54 @@ export async function listFindings(
     },
   );
   return readJSON<FindingListResponse>(response);
+}
+
+export async function getFinding(
+  id: string,
+  signal?: AbortSignal,
+): Promise<FindingDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<FindingDetail>(response);
+}
+
+export async function getFindingEvidence(
+  id: string,
+  contextMinutes = 5,
+  signal?: AbortSignal,
+): Promise<FindingEvidenceContext> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}/evidence?context_minutes=${Math.min(Math.max(contextMinutes, 0), 60)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<FindingEvidenceContext>(response);
+}
+
+export async function updateFindingStatus(
+  id: string,
+  status: FindingStatus,
+  actorID: string,
+): Promise<FindingDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ status }),
+    },
+  );
+  return readJSON<FindingDetail>(response);
 }
 
 export async function getAssetPivot(
