@@ -127,15 +127,99 @@ It includes:
 
 The running implementation has also been captured back into the Phase 4 Figma file as an editable reference frame.
 
+## Real gateway integration
+
+The console now has a same-origin Next.js proxy:
+
+```text
+/api/sentinel/*
+```
+
+It forwards bounded analyst requests to the Go gateway configured by:
+
+```text
+SENTINEL_GATEWAY_URL
+```
+
+The default local value is:
+
+```text
+http://127.0.0.1:8080
+```
+
+Browser code therefore does not need direct cross-origin access to the Go service.
+
+The proxy currently forwards the analyst methods required by the console:
+
+- `GET`;
+- `POST`;
+- `PATCH`.
+
+Only the development analyst headers used by the current backend contract are forwarded.
+
+Gateway failures are returned to the UI as explicit `503 gateway_unavailable` responses rather than being silently replaced with fake data.
+
+## Investigation Graph
+
+The second signature workspace is now implemented at:
+
+```text
+/investigations
+```
+
+Unlike the first overview screen, this workspace is wired to the real Phase 3 backend.
+
+It loads:
+
+- the persisted investigation list;
+- selected investigation details;
+- linked findings;
+- linked evidence events;
+- investigation audit history;
+- the persisted investigation timeline.
+
+The UI derives a relationship graph from those persisted records.
+
+Current graph node classes are:
+
+- identities;
+- assets;
+- network endpoints;
+- findings;
+- detections.
+
+Edges are derived from evidence relationships such as:
+
+- identity → asset activity;
+- asset → source IP;
+- source IP → destination IP;
+- evidence → finding;
+- finding → detection.
+
+Suspicious evidence relationships animate across the graph using Framer Motion.
+
+The workspace also includes:
+
+- a real investigation selector;
+- priority and status context;
+- a node inspector;
+- a chronological evidence timeline;
+- explicit gateway-unavailable and retry states;
+- responsive horizontal graph exploration for smaller displays.
+
+This is the first Phase 4 screen that directly renders live persisted Sentinel data rather than representative presentation data.
+
+The running screen has been captured back into the Phase 4 Figma file as an editable implementation reference.
+
 ## Next frontend work
 
 1. connect the Environment workspace to real asset, identity, finding, and event APIs;
-2. build the Investigation Graph on top of Phase 3 pivots and investigation timelines;
+2. [x] build the Investigation Graph on top of Phase 3 investigations and timelines;
 3. build the Threat Hunt Canvas against the typed saved-hunt API;
 4. connect overview metrics and findings to real gateway endpoints;
 5. build findings list/detail and evidence timeline;
-6. build investigations and case-management views;
+6. extend investigation case-management actions from the graph workspace;
 7. add detection-management controls;
-8. add loading, empty, failure, and degraded-backend states;
+8. expand loading, empty, failure, and degraded-backend states;
 9. complete responsive and accessibility testing;
 10. add end-to-end analyst workflow tests.
