@@ -226,3 +226,37 @@ export type AssetPivot = {
   recent_events: EvidenceEvent[];
   findings: Finding[];
 };
+
+export type DetectionRecord = {
+  id: string;
+  version: number;
+  title: string;
+  description: string;
+  severity: string;
+  enabled: boolean;
+  definition: Record<string, unknown>;
+  mitre: Array<Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DetectionListResponse = {
+  count: number;
+  detections: DetectionRecord[];
+};
+
+export type DetectionMetric = {
+  detection_id: string;
+  hit_count: number;
+  open_count: number;
+  confirmed_count: number;
+  false_positive_count: number;
+  closed_count: number;
+  false_positive_rate: number;
+  last_triggered_at?: string;
+};
+
+export type DetectionMetricsResponse = {
+  count: number;
+  metrics: DetectionMetric[];
+};

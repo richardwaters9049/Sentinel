@@ -5,6 +5,9 @@ import type {
   FindingEvidenceContext,
   FindingListResponse,
   FindingStatus,
+  DetectionListResponse,
+  DetectionMetricsResponse,
+  DetectionRecord,
   HuntDefinition,
   HuntListResponse,
   HuntQuery,
@@ -178,6 +181,45 @@ export async function updateFindingStatus(
     },
   );
   return readJSON<FindingDetail>(response);
+}
+
+export async function listDetections(
+  signal?: AbortSignal,
+): Promise<DetectionListResponse> {
+  const response = await fetch("/api/sentinel/api/v1/detections", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<DetectionListResponse>(response);
+}
+
+export async function getDetectionMetrics(
+  signal?: AbortSignal,
+): Promise<DetectionMetricsResponse> {
+  const response = await fetch("/api/sentinel/api/v1/detections/metrics", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<DetectionMetricsResponse>(response);
+}
+
+export async function setDetectionEnabled(
+  id: string,
+  enabled: boolean,
+  actorID: string,
+): Promise<DetectionRecord> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/detections/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  return readJSON<DetectionRecord>(response);
 }
 
 export async function getAssetPivot(

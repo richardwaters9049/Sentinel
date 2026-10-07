@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress on:
+Complete on:
 
 ```text
 feat/phase-4-analyst-console
@@ -490,15 +490,105 @@ A local end-to-end verification through the Next.js proxy confirmed:
 
 The Findings workspace has been captured into the Phase 4 Figma file as an editable implementation reference.
 
-## Next frontend work
+## Phase 4 completion
+
+Phase 4 is complete.
+
+The analyst console now exposes the backend work from Phases 1–3 as a connected defensive-security product rather than a collection of isolated dashboard screens.
+
+The implemented analyst flow is:
+
+```text
+Live environment
+      ↓
+Finding analysis
+      ↓
+Threat hunt canvas
+      ↓
+Evidence selection
+      ↓
+Investigation graph
+      ↓
+Case management
+```
+
+The overview is now backed by live Sentinel data. It combines persisted findings, investigations, hunts, telemetry, detection state, and detection metrics. Partial backend failure produces a degraded-mode notice while still rendering datasets that remain available.
+
+The Detection Engineering workspace is available at:
+
+```text
+/detections
+```
+
+It provides:
+
+- the real persisted detection catalogue;
+- runtime enabled/disabled state;
+- hit/open/confirmed/false-positive metrics;
+- last-triggered timestamps;
+- observed false-positive quality;
+- audited enable/disable controls.
+
+Runtime mutation still uses the Phase 3 development actor header and is not production authentication.
+
+Cross-console accessibility and UX hardening now includes:
+
+- a keyboard-accessible skip link;
+- visible focus rings;
+- reduced-motion support through `prefers-reduced-motion`;
+- pointer cursors on interactive controls;
+- route-aware navigation with `aria-current`;
+- labelled icon-only controls on the finalised surfaces;
+- responsive grid layouts and horizontally bounded investigation visualisations;
+- explicit loading, empty, failure, retry, and degraded-data states.
+
+The sidebar now exposes only implemented Phase 4 routes so the console does not advertise dead navigation targets.
+
+## Phase 4 regression
+
+Phase 4 adds:
+
+```text
+scripts/phase4-workflow-smoke.sh
+scripts/phase4-final-regression.sh
+```
+
+and Make targets:
+
+```text
+make workflow-phase4
+make final-phase4
+```
+
+The workflow smoke test starts isolated gateway and production-console processes and verifies the analyst path through the Next.js same-origin proxy:
+
+1. primary application routes;
+2. live overview APIs;
+3. synthetic telemetry ingestion;
+4. finding detail and evidence context;
+5. saved-hunt creation and execution;
+6. hunt evidence escalation into an investigation;
+7. hunt-run attachment;
+8. analyst note and case-status mutation;
+9. persisted audit records;
+10. detection catalogue and metrics;
+11. audited detection disable/restore.
+
+The final regression runs the backend checks and race detector, the full Phase 3 regression baseline, frontend lint, the production Next.js build, and the Phase 4 workflow smoke test.
+
+The complete Phase 4 final regression passes.
+
+The final Detection Engineering screen has also been captured into the Phase 4 Figma file.
+
+## Phase 4 checklist
 
 1. [x] connect the Environment workspace to real asset, identity, finding, and event APIs;
 2. [x] build the Investigation Graph on top of Phase 3 investigations and timelines;
 3. [x] build the Threat Hunt Canvas against the typed saved-hunt API;
-4. connect overview metrics and findings to real gateway endpoints;
+4. [x] connect overview metrics and findings to real gateway endpoints;
 5. [x] build findings list/detail, explainability, evidence timeline, and escalation pivots;
 6. [x] extend investigation case-management actions from the graph workspace;
 7. [x] add direct hunt-result → investigation pivoting;
-8. add detection-management controls;
-9. expand loading, empty, failure, and degraded-backend states;
-10. complete responsive/accessibility and end-to-end analyst workflow testing.
+8. [x] add detection-management controls;
+9. [x] expand loading, empty, failure, retry, and degraded-backend states;
+10. [x] complete responsive/accessibility hardening and end-to-end analyst workflow testing.
