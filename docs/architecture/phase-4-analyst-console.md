@@ -370,6 +370,54 @@ A local end-to-end verification through the Next.js same-origin proxy confirmed:
 - the resulting audit history contained both `investigation.created` and `investigation.hunt_run_attached`;
 - direct navigation to the resulting Investigation Graph returned successfully.
 
+## Investigation case management
+
+The Investigation Graph now supports the full Phase 3 case-management workflow without leaving the graph workspace.
+
+Analysts can now:
+
+- transition a case through only the statuses permitted by the backend workflow;
+- update the case owner;
+- change case priority;
+- add durable analyst notes;
+- see those changes immediately reflected in the investigation header, case list, audit history, and timeline.
+
+The inline workflow controls map directly to the existing Phase 3 APIs:
+
+```text
+PATCH /api/v1/investigations/{id}
+PATCH /api/v1/investigations/{id}/status
+POST  /api/v1/investigations/{id}/notes
+```
+
+The frontend mirrors the validated status model:
+
+```text
+open
+ ↓
+investigating
+ ├─→ contained
+ │     ├─→ investigating
+ │     └─→ closed
+ └─→ closed
+```
+
+Closed remains terminal.
+
+Owner and priority changes are persisted through the backend audit path. Analyst notes are added to the durable investigation timeline rather than being held as local UI state.
+
+A local end-to-end mutation check through the Next.js proxy verified:
+
+- owner update;
+- priority update;
+- analyst-note creation;
+- `open → investigating` status transition;
+- timeline growth;
+- audit entries for `investigation.metadata_changed`, `investigation.note_added`, and `investigation.status_changed`;
+- direct loading of the updated case in the Investigation Graph.
+
+The updated case-management workspace has been captured back into the Phase 4 Figma file.
+
 ## Next frontend work
 
 1. [x] connect the Environment workspace to real asset, identity, finding, and event APIs;
@@ -377,7 +425,7 @@ A local end-to-end verification through the Next.js same-origin proxy confirmed:
 3. [x] build the Threat Hunt Canvas against the typed saved-hunt API;
 4. connect overview metrics and findings to real gateway endpoints;
 5. build findings list/detail and evidence timeline;
-6. extend investigation case-management actions from the graph workspace;
+6. [x] extend investigation case-management actions from the graph workspace;
 7. [x] add direct hunt-result → investigation pivoting;
 8. add detection-management controls;
 9. expand loading, empty, failure, and degraded-backend states;

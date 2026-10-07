@@ -182,3 +182,63 @@ export async function attachHuntRunToInvestigation(
   );
   return readJSON<InvestigationDetail>(response);
 }
+
+export async function updateInvestigationMetadata(
+  id: string,
+  input: {
+    owner_id?: string;
+    priority?: "low" | "medium" | "high" | "critical";
+  },
+  actorID: string,
+): Promise<InvestigationDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  return readJSON<InvestigationDetail>(response);
+}
+
+export async function updateInvestigationStatus(
+  id: string,
+  status: "open" | "investigating" | "contained" | "closed",
+  actorID: string,
+): Promise<InvestigationDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ status }),
+    },
+  );
+  return readJSON<InvestigationDetail>(response);
+}
+
+export async function addInvestigationNote(
+  id: string,
+  body: string,
+  actorID: string,
+): Promise<InvestigationDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}/notes`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sentinel-Actor": actorID,
+      },
+      body: JSON.stringify({ body }),
+    },
+  );
+  return readJSON<InvestigationDetail>(response);
+}

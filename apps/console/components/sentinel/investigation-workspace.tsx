@@ -10,12 +10,16 @@ import {
   Fingerprint,
   GitBranch,
   Link2,
+  MessageSquarePlus,
   Network,
   RefreshCcw,
   Search,
+  Save,
   ShieldAlert,
+  ShieldCheck,
   SquareArrowOutUpRight,
   UserRound,
+  UserRoundCheck,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
@@ -28,11 +32,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  addInvestigationNote,
   getInvestigation,
   listInvestigations,
+  updateInvestigationMetadata,
+  updateInvestigationStatus,
 } from "@/lib/sentinel/client";
 import type {
   EvidenceEvent,
@@ -131,6 +146,21 @@ function priorityClass(priority: InvestigationSummary["priority"]) {
       return "border-violet-400/35 bg-violet-400/10 text-violet-300";
     default:
       return "border-slate-700 bg-slate-800/40 text-slate-400";
+  }
+}
+
+function allowedStatusTransitions(
+  status: InvestigationSummary["status"],
+): InvestigationSummary["status"][] {
+  switch (status) {
+    case "open":
+      return ["investigating", "closed"];
+    case "investigating":
+      return ["contained", "closed"];
+    case "contained":
+      return ["investigating", "closed"];
+    default:
+      return [];
   }
 }
 
@@ -412,6 +442,12 @@ export default function InvestigationWorkspace() {
   const [selectedID, setSelectedID] = useState("");
   const [detail, setDetail] = useState<InvestigationDetail | null>(null);
   const [selectedNodeID, setSelectedNodeID] = useState("");
+  const [ownerDraft, setOwnerDraft] = useState("");
+  const [priorityDraft, setPriorityDraft] = useState<
+    InvestigationSummary["priority"]
+  >("medium");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
@@ -469,6 +505,8 @@ export default function InvestigationWorkspace() {
     void getInvestigation(selectedID, controller.signal)
       .then((response) => {
         setDetail(response);
+        setOwnerDraft(response.owner_id ?? "");
+        setPriorityDraft(response.priority);
         setSelectedNodeID("");
       })
       .catch((cause) => {
@@ -493,6 +531,93 @@ export default function InvestigationWorkspace() {
   );
 
   const selectedNode = nodeByID.get(selectedNodeID) ?? graph.nodes[0];
+
+  function applyUpdatedDetail(updated: InvestigationDetail) {
+    setDetail(updated);
+    setOwnerDraft(updated.owner_id ?? "");
+    setPriorityDraft(updated.priority);
+    setInvestigations((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
+    );
+  }
+
+  async function saveCaseMetadata() {
+    if (!detail) return;
+
+    setActionBusy(true);
+    setError("");
+
+    try {
+      const updated = await updateInvestigationMetadata(
+        detail.id,
+        {
+          owner_id: ownerDraft.trim(),
+          priority: priorityDraft,
+        },
+        "phase4-analyst",
+      );
+      applyUpdatedDetail(updated);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Investigation metadata could not be updated",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function transitionCase(
+    status: InvestigationSummary["status"],
+  ) {
+    if (!detail) return;
+
+    setActionBusy(true);
+    setError("");
+
+    try {
+      const updated = await updateInvestigationStatus(
+        detail.id,
+        status,
+        "phase4-analyst",
+      );
+      applyUpdatedDetail(updated);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Investigation status could not be updated",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function submitAnalystNote() {
+    if (!detail || !noteDraft.trim()) return;
+
+    setActionBusy(true);
+    setError("");
+
+    try {
+      const updated = await addInvestigationNote(
+        detail.id,
+        noteDraft.trim(),
+        "phase4-analyst",
+      );
+      applyUpdatedDetail(updated);
+      setNoteDraft("");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Analyst note could not be added",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   return (
     <main className="sentinel-grid sentinel-glow min-h-screen bg-[#070a0f] text-slate-100">
@@ -702,6 +827,213 @@ export default function InvestigationWorkspace() {
                         </div>
                       </CardHeader>
                     </Card>
+
+                    <motion.section
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.04 }}
+                      className="grid gap-4 xl:grid-cols-[0.95fr_1fr_1.2fr]"
+                    >
+                      <Card className="surface-card rounded-2xl border-slate-800/85 bg-transparent py-0">
+                        <CardHeader className="px-5 pb-4 pt-5">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="size-4 text-emerald-400" />
+                            <div>
+                              <h3 className="text-[0.82rem] font-semibold text-slate-200">
+                                Case status
+                              </h3>
+                              <p className="mt-1 text-[0.61rem] leading-5 text-slate-600">
+                                Only valid workflow transitions are available.
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <Separator className="bg-slate-800/80" />
+                        <CardContent className="space-y-3 p-5">
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-800/75 bg-slate-950/40 p-3">
+                            <span className="text-[0.6rem] font-semibold tracking-[0.09em] text-slate-700">
+                              CURRENT
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="border-slate-700 bg-slate-800/35 text-[0.6rem] font-semibold tracking-[0.08em] text-slate-300"
+                            >
+                              {detail.status.toUpperCase()}
+                            </Badge>
+                          </div>
+
+                          {allowedStatusTransitions(detail.status).length > 0 ? (
+                            <div className="grid gap-2">
+                              {allowedStatusTransitions(detail.status).map(
+                                (status) => (
+                                  <Button
+                                    key={status}
+                                    type="button"
+                                    variant="outline"
+                                    disabled={actionBusy}
+                                    onClick={() => void transitionCase(status)}
+                                    className="justify-between cursor-pointer border-slate-800 bg-slate-950/35 text-[0.68rem] font-medium text-slate-300 hover:border-emerald-400/25 hover:bg-emerald-400/[0.05] hover:text-emerald-200 disabled:cursor-not-allowed"
+                                  >
+                                    <span className="capitalize">
+                                      Move to {status.replace("_", " ")}
+                                    </span>
+                                    <ChevronRight className="size-3.5" />
+                                  </Button>
+                                ),
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] p-3 text-[0.65rem] leading-5 text-emerald-200/60">
+                              This case is closed. No further status transition is
+                              available.
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <Card className="surface-card rounded-2xl border-slate-800/85 bg-transparent py-0">
+                        <CardHeader className="px-5 pb-4 pt-5">
+                          <div className="flex items-center gap-2">
+                            <UserRoundCheck className="size-4 text-violet-400" />
+                            <div>
+                              <h3 className="text-[0.82rem] font-semibold text-slate-200">
+                                Ownership & priority
+                              </h3>
+                              <p className="mt-1 text-[0.61rem] leading-5 text-slate-600">
+                                Keep the case accountable as severity changes.
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <Separator className="bg-slate-800/80" />
+                        <CardContent className="grid gap-3 p-5">
+                          <div>
+                            <div className="mb-2 text-[0.57rem] font-semibold tracking-[0.09em] text-slate-700">
+                              OWNER
+                            </div>
+                            <Input
+                              value={ownerDraft}
+                              onChange={(event) =>
+                                setOwnerDraft(event.target.value)
+                              }
+                              placeholder="analyst-id"
+                              className="h-10 border-slate-800 bg-slate-950/40 text-[0.7rem] text-slate-300 placeholder:text-slate-700"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="mb-2 text-[0.57rem] font-semibold tracking-[0.09em] text-slate-700">
+                              PRIORITY
+                            </div>
+                            <Select
+                              value={priorityDraft}
+                              onValueChange={(value) => {
+                                if (value) {
+                                  setPriorityDraft(
+                                    value as InvestigationSummary["priority"],
+                                  );
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-10 w-full cursor-pointer border-slate-800 bg-slate-950/40 text-[0.7rem] text-slate-300">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="border-slate-800 bg-[#0c1119] text-slate-300">
+                                {["low", "medium", "high", "critical"].map(
+                                  (priority) => (
+                                    <SelectItem
+                                      key={priority}
+                                      value={priority}
+                                      className="cursor-pointer text-[0.7rem]"
+                                    >
+                                      {priority.charAt(0).toUpperCase() +
+                                        priority.slice(1)}
+                                    </SelectItem>
+                                  ),
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <Button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() => void saveCaseMetadata()}
+                            className="mt-1 cursor-pointer bg-gradient-to-r from-violet-400 to-sky-400 text-[0.69rem] font-semibold text-slate-950 hover:from-violet-300 hover:to-sky-300 disabled:cursor-not-allowed"
+                          >
+                            {actionBusy ? (
+                              <RefreshCcw className="size-3.5 animate-spin" />
+                            ) : (
+                              <Save className="size-3.5" />
+                            )}
+                            Save case details
+                          </Button>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="surface-card rounded-2xl border-slate-800/85 bg-transparent py-0">
+                        <CardHeader className="px-5 pb-4 pt-5">
+                          <div className="flex items-center gap-2">
+                            <MessageSquarePlus className="size-4 text-sky-400" />
+                            <div>
+                              <h3 className="text-[0.82rem] font-semibold text-slate-200">
+                                Analyst note
+                              </h3>
+                              <p className="mt-1 text-[0.61rem] leading-5 text-slate-600">
+                                Notes become part of the durable case timeline.
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <Separator className="bg-slate-800/80" />
+                        <CardContent className="space-y-3 p-5">
+                          <Textarea
+                            value={noteDraft}
+                            onChange={(event) =>
+                              setNoteDraft(event.target.value)
+                            }
+                            maxLength={5000}
+                            placeholder="Record your reasoning, next action, or evidence assessment…"
+                            className="min-h-28 resize-none border-slate-800 bg-slate-950/40 text-[0.7rem] leading-5 tracking-[0.02em] text-slate-300 placeholder:text-slate-700"
+                          />
+
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[0.57rem] text-slate-700">
+                              {noteDraft.length}/5000
+                            </span>
+                            <Button
+                              type="button"
+                              disabled={actionBusy || !noteDraft.trim()}
+                              onClick={() => void submitAnalystNote()}
+                              className="cursor-pointer bg-gradient-to-r from-sky-400 to-cyan-300 text-[0.68rem] font-semibold text-slate-950 hover:from-sky-300 hover:to-cyan-200 disabled:cursor-not-allowed"
+                            >
+                              {actionBusy ? (
+                                <RefreshCcw className="size-3.5 animate-spin" />
+                              ) : (
+                                <MessageSquarePlus className="size-3.5" />
+                              )}
+                              Add note
+                            </Button>
+                          </div>
+
+                          {detail.notes[0] ? (
+                            <div className="rounded-xl border border-slate-800/70 bg-slate-950/30 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[0.58rem] font-semibold tracking-[0.08em] text-slate-700">
+                                  LATEST NOTE
+                                </span>
+                                <span className="font-mono text-[0.56rem] text-slate-700">
+                                  {formatTime(detail.notes[0].created_at)}
+                                </span>
+                              </div>
+                              <div className="mt-2 line-clamp-3 text-[0.65rem] leading-5 text-slate-500">
+                                {detail.notes[0].body}
+                              </div>
+                            </div>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    </motion.section>
 
                     <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_330px]">
                       <section className="overflow-hidden rounded-[1.4rem] border border-slate-800/85 bg-[#080d14]/92">
