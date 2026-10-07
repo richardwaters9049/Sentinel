@@ -10,8 +10,10 @@ import {
   Clock3,
   Crosshair,
   Database,
+  FilePlus2,
   Fingerprint,
   FlaskConical,
+  Link2,
   ListFilter,
   Network,
   Play,
@@ -26,11 +28,21 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,8 +57,11 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  attachHuntRunToInvestigation,
   createHunt,
+  createInvestigation,
   listHunts,
+  listInvestigations,
   runHunt,
 } from "@/lib/sentinel/client";
 import type {
@@ -54,6 +69,7 @@ import type {
   HuntDefinition,
   HuntQuery,
   HuntRunResult,
+  InvestigationSummary,
 } from "@/lib/sentinel/types";
 
 type ClauseField =
@@ -362,9 +378,13 @@ function ClauseBlock({
 function HuntResultCard({
   event,
   index,
+  selected,
+  onToggle,
 }: {
   event: EvidenceEvent;
   index: number;
+  selected: boolean;
+  onToggle: () => void;
 }) {
   const summary = eventSummary(event);
 
@@ -373,10 +393,22 @@ function HuntResultCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, delay: Math.min(index * 0.035, 0.3) }}
-      className="rounded-2xl border border-slate-800/80 bg-slate-950/35 p-4"
+      className={cn(
+        "rounded-2xl border bg-slate-950/35 p-4 transition",
+        selected
+          ? "border-cyan-400/35 shadow-[0_0_34px_rgba(34,211,238,0.08)]"
+          : "border-slate-800/80",
+      )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggle}
+            aria-label={`Select event ${event.id}`}
+            className="mt-0.5 cursor-pointer border-slate-700 data-checked:border-cyan-300 data-checked:bg-cyan-300 data-checked:text-slate-950"
+          />
+          <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
@@ -388,8 +420,9 @@ function HuntResultCard({
               {event.action}
             </span>
           </div>
-          <div className="mt-2 font-mono text-[0.59rem] text-slate-700">
+          <div className="mt-2 truncate font-mono text-[0.59rem] text-slate-700">
             {event.id}
+          </div>
           </div>
         </div>
         <span className="font-mono text-[0.61rem] text-slate-600">
@@ -425,6 +458,7 @@ function HuntResultCard({
 }
 
 export default function HuntCanvas() {
+  const router = useRouter();
   const [clauses, setClauses] = useState<Clause[]>([
     { id: "initial-category", field: "category", value: "authentication" },
     { id: "initial-outcome", field: "outcome", value: "success" },
@@ -438,9 +472,22 @@ export default function HuntCanvas() {
     "Explore recent successful authentication activity and pivot suspicious results into an investigation.",
   );
   const [hunts, setHunts] = useState<HuntDefinition[]>([]);
+  const [investigations, setInvestigations] = useState<InvestigationSummary[]>([]);
   const [result, setResult] = useState<HuntRunResult | null>(null);
+  const [selectedEventIDs, setSelectedEventIDs] = useState<Set<string>>(
+    new Set(),
+  );
   const [running, setRunning] = useState(false);
   const [loadingHunts, setLoadingHunts] = useState(true);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
+  const [caseTitle, setCaseTitle] = useState("Hunt evidence investigation");
+  const [casePriority, setCasePriority] = useState<
+    "low" | "medium" | "high" | "critical"
+  >("high");
+  const [caseOwner, setCaseOwner] = useState("phase4-analyst");
+  const [targetInvestigationID, setTargetInvestigationID] = useState("");
   const [error, setError] = useState("");
 
   const query = useMemo(() => buildQuery(clauses), [clauses]);
@@ -452,11 +499,24 @@ export default function HuntCanvas() {
   useEffect(() => {
     const controller = new AbortController();
 
-    void listHunts(controller.signal)
-      .then((response) => setHunts(response.hunts))
+    void Promise.all([
+      listHunts(controller.signal),
+      listInvestigations(controller.signal),
+    ])
+      .then(([huntResponse, investigationResponse]) => {
+        setHunts(huntResponse.hunts);
+        setInvestigations(investigationResponse.investigations);
+        setTargetInvestigationID(
+          investigationResponse.investigations[0]?.id ?? "",
+        );
+      })
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setError(cause instanceof Error ? cause.message : "Could not load hunts");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Could not load hunt workspace data",
+        );
       })
       .finally(() => setLoadingHunts(false));
 
@@ -492,10 +552,87 @@ export default function HuntCanvas() {
 
       const run = await runHunt(created.id, "phase4-analyst");
       setResult(run);
+      setSelectedEventIDs(new Set(run.events.map((event) => event.id)));
+      setCaseTitle(`Hunt: ${created.name}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Hunt failed");
     } finally {
       setRunning(false);
+    }
+  }
+
+  function toggleEvent(eventID: string) {
+    setSelectedEventIDs((current) => {
+      const next = new Set(current);
+      if (next.has(eventID)) {
+        next.delete(eventID);
+      } else {
+        next.add(eventID);
+      }
+      return next;
+    });
+  }
+
+  async function createInvestigationFromSelection() {
+    if (!result || selectedEventIDs.size === 0) {
+      setError("Select at least one evidence event before creating a case.");
+      return;
+    }
+
+    setActionBusy(true);
+    setError("");
+
+    try {
+      const created = await createInvestigation(
+        {
+          title: caseTitle.trim() || `Hunt investigation ${result.run_id}`,
+          description:
+            hypothesis.trim() ||
+            "Investigation created from selected Sentinel hunt evidence.",
+          priority: casePriority,
+          owner_id: caseOwner.trim() || undefined,
+          event_ids: [...selectedEventIDs],
+        },
+        "phase4-analyst",
+      );
+
+      setInvestigations((current) => [created, ...current]);
+      setCreateDialogOpen(false);
+      router.push(`/investigations?id=${encodeURIComponent(created.id)}`);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Investigation could not be created",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function attachCurrentRun() {
+    if (!result || !targetInvestigationID) {
+      setError("Choose an investigation before attaching this hunt run.");
+      return;
+    }
+
+    setActionBusy(true);
+    setError("");
+
+    try {
+      const updated = await attachHuntRunToInvestigation(
+        targetInvestigationID,
+        result.run_id,
+        "phase4-analyst",
+      );
+      setAttachDialogOpen(false);
+      router.push(`/investigations?id=${encodeURIComponent(updated.id)}`);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Hunt run could not be attached",
+      );
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -506,6 +643,8 @@ export default function HuntCanvas() {
     try {
       const run = await runHunt(hunt.id, "phase4-analyst");
       setResult(run);
+      setSelectedEventIDs(new Set(run.events.map((event) => event.id)));
+      setCaseTitle(`Hunt: ${hunt.name}`);
       setName(hunt.name);
       setDescription(hunt.description);
       setHypothesis(hunt.hypothesis);
@@ -755,7 +894,7 @@ export default function HuntCanvas() {
                   </div>
 
                   {result ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge
                         variant="outline"
                         className="border-cyan-400/20 bg-cyan-400/[0.06] text-[0.6rem] font-bold tracking-[0.08em] text-cyan-300"
@@ -768,9 +907,67 @@ export default function HuntCanvas() {
                       >
                         {result.result_count} RESULTS
                       </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-violet-400/20 bg-violet-400/[0.06] text-[0.6rem] text-violet-300"
+                      >
+                        {selectedEventIDs.size} SELECTED
+                      </Badge>
                     </div>
                   ) : null}
                 </div>
+
+                {result && result.events.length > 0 ? (
+                  <div className="flex flex-col gap-3 border-b border-slate-800/75 bg-slate-950/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setSelectedEventIDs(
+                            new Set(result.events.map((event) => event.id)),
+                          )
+                        }
+                        className="cursor-pointer text-[0.66rem] text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedEventIDs(new Set())}
+                        className="cursor-pointer text-[0.66rem] text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAttachDialogOpen(true)}
+                        className="cursor-pointer border-violet-400/20 bg-violet-400/[0.05] text-[0.67rem] text-violet-300 hover:bg-violet-400/10 hover:text-violet-200"
+                      >
+                        <Link2 className="size-3.5" />
+                        Attach run
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={selectedEventIDs.size === 0}
+                        onClick={() => setCreateDialogOpen(true)}
+                        className="cursor-pointer bg-gradient-to-r from-cyan-300 to-sky-400 text-[0.67rem] font-semibold text-slate-950 hover:from-cyan-200 hover:to-sky-300 disabled:cursor-not-allowed"
+                      >
+                        <FilePlus2 className="size-3.5" />
+                        Create investigation
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="p-4">
                   {result ? (
@@ -781,6 +978,8 @@ export default function HuntCanvas() {
                             key={event.id}
                             event={event}
                             index={index}
+                            selected={selectedEventIDs.has(event.id)}
+                            onToggle={() => toggleEvent(event.id)}
                           />
                         ))}
                       </div>
@@ -880,6 +1079,225 @@ export default function HuntCanvas() {
               </ScrollArea>
             </motion.aside>
           </section>
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogContent className="border-slate-800 bg-[#0b1018] p-0 text-slate-100 sm:max-w-xl">
+              <DialogHeader className="border-b border-slate-800/80 p-5">
+                <div className="flex items-center gap-2 text-[0.62rem] font-bold tracking-[0.11em] text-cyan-300/75">
+                  <FilePlus2 className="size-3.5" />
+                  HUNT → INVESTIGATION
+                </div>
+                <DialogTitle className="mt-2 text-[1.05rem] font-semibold text-white">
+                  Create investigation from selected evidence
+                </DialogTitle>
+                <DialogDescription className="text-[0.68rem] leading-5 text-slate-500">
+                  Sentinel will preserve the selected event IDs in a new case and
+                  open that case directly in the Investigation Graph.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 p-5">
+                <div>
+                  <Label
+                    htmlFor="case-title"
+                    className="text-[0.61rem] font-semibold tracking-[0.09em] text-slate-600"
+                  >
+                    CASE TITLE
+                  </Label>
+                  <Input
+                    id="case-title"
+                    value={caseTitle}
+                    onChange={(event) => setCaseTitle(event.target.value)}
+                    className="mt-2 border-slate-800 bg-slate-950/45 text-[0.72rem] text-slate-200"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label className="text-[0.61rem] font-semibold tracking-[0.09em] text-slate-600">
+                      PRIORITY
+                    </Label>
+                    <Select
+                      value={casePriority}
+                      onValueChange={(value) =>
+                        setCasePriority(
+                          value as "low" | "medium" | "high" | "critical",
+                        )
+                      }
+                    >
+                      <SelectTrigger className="mt-2 h-10 w-full cursor-pointer border-slate-800 bg-slate-950/45 text-[0.7rem] text-slate-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="border-slate-800 bg-[#0c1119] text-slate-300">
+                        {["low", "medium", "high", "critical"].map((priority) => (
+                          <SelectItem
+                            key={priority}
+                            value={priority}
+                            className="cursor-pointer text-[0.7rem]"
+                          >
+                            {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label
+                      htmlFor="case-owner"
+                      className="text-[0.61rem] font-semibold tracking-[0.09em] text-slate-600"
+                    >
+                      OWNER
+                    </Label>
+                    <Input
+                      id="case-owner"
+                      value={caseOwner}
+                      onChange={(event) => setCaseOwner(event.target.value)}
+                      className="mt-2 border-slate-800 bg-slate-950/45 text-[0.72rem] text-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[0.61rem] font-semibold tracking-[0.09em] text-cyan-300/65">
+                        SELECTED EVIDENCE
+                      </div>
+                      <div className="mt-1 text-[0.7rem] text-slate-400">
+                        {selectedEventIDs.size} event
+                        {selectedEventIDs.size === 1 ? "" : "s"} will be attached
+                        to the new investigation.
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="border-cyan-400/25 bg-cyan-400/10 text-cyan-300"
+                    >
+                      {selectedEventIDs.size}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="border-slate-800 bg-slate-950/35">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateDialogOpen(false)}
+                  className="cursor-pointer border-slate-800 bg-slate-950/45 text-slate-400 hover:bg-slate-900"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void createInvestigationFromSelection()}
+                  disabled={actionBusy || selectedEventIDs.size === 0}
+                  className="cursor-pointer bg-gradient-to-r from-cyan-300 to-sky-400 font-semibold text-slate-950 hover:from-cyan-200 hover:to-sky-300 disabled:cursor-not-allowed"
+                >
+                  {actionBusy ? (
+                    <RefreshCcw className="size-4 animate-spin" />
+                  ) : (
+                    <FilePlus2 className="size-4" />
+                  )}
+                  Create & open graph
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen}>
+            <DialogContent className="border-slate-800 bg-[#0b1018] p-0 text-slate-100 sm:max-w-xl">
+              <DialogHeader className="border-b border-slate-800/80 p-5">
+                <div className="flex items-center gap-2 text-[0.62rem] font-bold tracking-[0.11em] text-violet-300/75">
+                  <Link2 className="size-3.5" />
+                  ATTACH DURABLE HUNT RUN
+                </div>
+                <DialogTitle className="mt-2 text-[1.05rem] font-semibold text-white">
+                  Add this run to an existing investigation
+                </DialogTitle>
+                <DialogDescription className="text-[0.68rem] leading-5 text-slate-500">
+                  This attaches the complete persisted hunt run, preserving the
+                  exact result set and audit trail before opening the case graph.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 p-5">
+                <div>
+                  <Label className="text-[0.61rem] font-semibold tracking-[0.09em] text-slate-600">
+                    TARGET INVESTIGATION
+                  </Label>
+                  <Select
+                    value={targetInvestigationID}
+                    onValueChange={(value) =>
+                      setTargetInvestigationID(value ?? "")
+                    }
+                  >
+                    <SelectTrigger className="mt-2 h-11 w-full cursor-pointer border-slate-800 bg-slate-950/45 text-left text-[0.7rem] text-slate-300">
+                      <SelectValue placeholder="Choose an investigation" />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-800 bg-[#0c1119] text-slate-300">
+                      {investigations.map((investigation) => (
+                        <SelectItem
+                          key={investigation.id}
+                          value={investigation.id}
+                          className="cursor-pointer text-[0.7rem]"
+                        >
+                          {investigation.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {result ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      [result.run_id, "run"],
+                      [result.result_count, "events"],
+                      [result.hunt_id.slice(0, 10), "hunt"],
+                    ].map(([value, label]) => (
+                      <div
+                        key={String(label)}
+                        className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3 text-center"
+                      >
+                        <div className="truncate text-[0.76rem] font-semibold text-slate-300">
+                          {String(value)}
+                        </div>
+                        <div className="mt-1 text-[0.54rem] font-semibold tracking-[0.08em] text-slate-700">
+                          {String(label).toUpperCase()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <DialogFooter className="border-slate-800 bg-slate-950/35">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAttachDialogOpen(false)}
+                  className="cursor-pointer border-slate-800 bg-slate-950/45 text-slate-400 hover:bg-slate-900"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void attachCurrentRun()}
+                  disabled={actionBusy || !targetInvestigationID}
+                  className="cursor-pointer bg-gradient-to-r from-violet-400 to-sky-400 font-semibold text-slate-950 hover:from-violet-300 hover:to-sky-300 disabled:cursor-not-allowed"
+                >
+                  {actionBusy ? (
+                    <RefreshCcw className="size-4 animate-spin" />
+                  ) : (
+                    <Link2 className="size-4" />
+                  )}
+                  Attach & open graph
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
         </section>
       </div>
     </main>

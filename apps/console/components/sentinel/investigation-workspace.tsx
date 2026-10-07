@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -403,6 +404,8 @@ function EvidenceTimeline({ timeline }: { timeline: TimelineEntry[] }) {
 }
 
 export default function InvestigationWorkspace() {
+  const searchParams = useSearchParams();
+  const requestedInvestigationID = searchParams.get("id") ?? "";
   const [investigations, setInvestigations] = useState<InvestigationSummary[]>(
     [],
   );
@@ -434,7 +437,12 @@ export default function InvestigationWorkspace() {
     void listInvestigations(controller.signal)
       .then((response) => {
         setInvestigations(response.investigations);
-        const firstID = response.investigations[0]?.id ?? "";
+        const requestedExists = response.investigations.some(
+          (item) => item.id === requestedInvestigationID,
+        );
+        const firstID = requestedExists
+          ? requestedInvestigationID
+          : response.investigations[0]?.id ?? "";
         if (firstID) {
           setLoadingDetail(true);
           setSelectedID(firstID);
@@ -451,7 +459,7 @@ export default function InvestigationWorkspace() {
       .finally(() => setLoadingList(false));
 
     return () => controller.abort();
-  }, []);
+  }, [requestedInvestigationID]);
 
   useEffect(() => {
     if (!selectedID) return;

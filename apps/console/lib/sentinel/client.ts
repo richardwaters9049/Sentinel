@@ -143,3 +143,42 @@ export async function getAssetPivot(
   );
   return readJSON<AssetPivot>(response);
 }
+
+export async function createInvestigation(
+  input: {
+    title: string;
+    description: string;
+    priority: "low" | "medium" | "high" | "critical";
+    owner_id?: string;
+    finding_ids?: string[];
+    event_ids?: string[];
+  },
+  actorID: string,
+): Promise<InvestigationDetail> {
+  const response = await fetch("/api/sentinel/api/v1/investigations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sentinel-Actor": actorID,
+    },
+    body: JSON.stringify(input),
+  });
+  return readJSON<InvestigationDetail>(response);
+}
+
+export async function attachHuntRunToInvestigation(
+  investigationID: string,
+  runID: number,
+  actorID: string,
+): Promise<InvestigationDetail> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/investigations/${encodeURIComponent(investigationID)}/hunt-runs/${runID}`,
+    {
+      method: "POST",
+      headers: {
+        "X-Sentinel-Actor": actorID,
+      },
+    },
+  );
+  return readJSON<InvestigationDetail>(response);
+}

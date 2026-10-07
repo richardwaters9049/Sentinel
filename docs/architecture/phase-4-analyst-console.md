@@ -320,6 +320,56 @@ Current behaviour includes:
 
 The Environment screen now represents the current synthetic lab data actually held by Sentinel. Empty security zones are shown honestly instead of being filled with placeholder assets.
 
+## Hunt evidence → investigation workflow
+
+The Threat Hunt Canvas now continues directly into case investigation.
+
+After a hunt run returns evidence, analysts can:
+
+- select individual result events;
+- select or clear the complete result set;
+- create a new investigation from only the selected evidence;
+- set case title, priority, and owner before creation;
+- attach the complete durable hunt run to an existing investigation;
+- move directly into the Investigation Graph after either action.
+
+The new-case path preserves the exact selected event IDs in the investigation.
+
+The existing-case path uses the Phase 3 durable hunt-run attachment endpoint so the full persisted result set and its audit history remain linked to the investigation.
+
+The workflow is now:
+
+```text
+Threat Hunt Canvas
+        ↓
+Persisted hunt run
+        ↓
+Select evidence
+        ↓
+┌─────────────────────────────┬──────────────────────────────┐
+│ Create new investigation    │ Attach full run to case      │
+│ selected event IDs          │ durable hunt-run linkage     │
+└─────────────────────────────┴──────────────────────────────┘
+        ↓
+Investigation Graph
+```
+
+The Investigation Graph accepts an investigation ID in the URL:
+
+```text
+/investigations?id={investigation_id}
+```
+
+so successful pivot actions land on the exact case rather than the first investigation in the list.
+
+A local end-to-end verification through the Next.js same-origin proxy confirmed:
+
+- a real saved hunt could execute;
+- selected hunt evidence could create a new persisted investigation;
+- the same durable hunt run could be attached to that investigation;
+- the resulting audit history contained both `investigation.created` and `investigation.hunt_run_attached`;
+- direct navigation to the resulting Investigation Graph returned successfully.
+
 ## Next frontend work
 
 1. [x] connect the Environment workspace to real asset, identity, finding, and event APIs;
@@ -328,7 +378,7 @@ The Environment screen now represents the current synthetic lab data actually he
 4. connect overview metrics and findings to real gateway endpoints;
 5. build findings list/detail and evidence timeline;
 6. extend investigation case-management actions from the graph workspace;
-7. add direct hunt-result → investigation pivoting;
+7. [x] add direct hunt-result → investigation pivoting;
 8. add detection-management controls;
 9. expand loading, empty, failure, and degraded-backend states;
 10. complete responsive/accessibility and end-to-end analyst workflow testing.
