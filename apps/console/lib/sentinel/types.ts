@@ -10,6 +10,17 @@ export type InvestigationSummary = {
   updated_at: string;
 };
 
+export type FindingStatus =
+  | "new"
+  | "triaged"
+  | "investigating"
+  | "false_positive"
+  | "benign_expected"
+  | "duplicate"
+  | "confirmed"
+  | "contained"
+  | "closed";
+
 export type Finding = {
   id: string;
   detection_id: string;
@@ -17,7 +28,7 @@ export type Finding = {
   title: string;
   severity: string;
   confidence: number;
-  status: string;
+  status: FindingStatus;
   first_observed_at: string;
   last_observed_at: string;
   evidence: Record<string, unknown>;
@@ -193,6 +204,18 @@ export type FindingListResponse = {
   findings: Finding[];
 };
 
+export type FindingDetail = Finding & {
+  events: EvidenceEvent[];
+  audit: AuditRecord[];
+};
+
+export type FindingEvidenceContext = {
+  finding_id: string;
+  linked_events: EvidenceEvent[];
+  context_events: EvidenceEvent[];
+  context_minutes: number;
+};
+
 export type AssetPivot = {
   id: string;
   hostname: string;
@@ -202,4 +225,38 @@ export type AssetPivot = {
   last_seen_at?: string;
   recent_events: EvidenceEvent[];
   findings: Finding[];
+};
+
+export type DetectionRecord = {
+  id: string;
+  version: number;
+  title: string;
+  description: string;
+  severity: string;
+  enabled: boolean;
+  definition: Record<string, unknown>;
+  mitre: Array<Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DetectionListResponse = {
+  count: number;
+  detections: DetectionRecord[];
+};
+
+export type DetectionMetric = {
+  detection_id: string;
+  hit_count: number;
+  open_count: number;
+  confirmed_count: number;
+  false_positive_count: number;
+  closed_count: number;
+  false_positive_rate: number;
+  last_triggered_at?: string;
+};
+
+export type DetectionMetricsResponse = {
+  count: number;
+  metrics: DetectionMetric[];
 };

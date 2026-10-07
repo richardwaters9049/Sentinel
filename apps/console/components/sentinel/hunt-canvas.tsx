@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -459,17 +459,69 @@ function HuntResultCard({
 
 export default function HuntCanvas() {
   const router = useRouter();
-  const [clauses, setClauses] = useState<Clause[]>([
-    { id: "initial-category", field: "category", value: "authentication" },
-    { id: "initial-outcome", field: "outcome", value: "success" },
-    { id: "initial-window", field: "last_minutes", value: "60" },
-  ]);
-  const [name, setName] = useState("Interactive service-account activity");
+  const searchParams = useSearchParams();
+  const sourceFinding = searchParams.get("from_finding");
+  const sourceTitle = searchParams.get("title");
+  const sourceCategory = searchParams.get("category");
+  const sourceIdentity = searchParams.get("identity_id");
+  const sourceAsset = searchParams.get("asset_id");
+
+  const [clauses, setClauses] = useState<Clause[]>(() => {
+    if (!sourceFinding) {
+      return [
+        { id: "initial-category", field: "category", value: "authentication" },
+        { id: "initial-outcome", field: "outcome", value: "success" },
+        { id: "initial-window", field: "last_minutes", value: "60" },
+      ];
+    }
+
+    const next: Clause[] = [];
+    if (sourceCategory) {
+      next.push({
+        id: "finding-category",
+        field: "category",
+        value: sourceCategory,
+      });
+    }
+    if (sourceIdentity) {
+      next.push({
+        id: "finding-identity",
+        field: "identity_id",
+        value: sourceIdentity,
+      });
+    }
+    if (sourceAsset) {
+      next.push({
+        id: "finding-asset",
+        field: "asset_id",
+        value: sourceAsset,
+      });
+    }
+    next.push({
+      id: "finding-window",
+      field: "last_minutes",
+      value: "60",
+    });
+    return next;
+  });
+  const [name, setName] = useState(
+    sourceFinding
+      ? sourceTitle
+        ? "Follow-up hunt: " + sourceTitle
+        : "Finding follow-up hunt"
+      : "Interactive service-account activity",
+  );
   const [hypothesis, setHypothesis] = useState(
-    "A service identity may be authenticating interactively from a corporate system.",
+    sourceFinding
+      ? "Related activity may exist around finding " +
+          sourceFinding +
+          " and should be tested across the same identity, asset, and event category."
+      : "A service identity may be authenticating interactively from a corporate system.",
   );
   const [description, setDescription] = useState(
-    "Explore recent successful authentication activity and pivot suspicious results into an investigation.",
+    sourceFinding
+      ? "Prefilled from Sentinel finding " + sourceFinding + "."
+      : "Explore recent successful authentication activity and pivot suspicious results into an investigation.",
   );
   const [hunts, setHunts] = useState<HuntDefinition[]>([]);
   const [investigations, setInvestigations] = useState<InvestigationSummary[]>([]);
