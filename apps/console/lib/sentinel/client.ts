@@ -1,4 +1,7 @@
 import type {
+  AssetPivot,
+  EventListResponse,
+  FindingListResponse,
   HuntDefinition,
   HuntListResponse,
   HuntQuery,
@@ -96,4 +99,47 @@ export async function runHunt(
     },
   );
   return readJSON<HuntRunResult>(response);
+}
+
+export async function listEvents(
+  limit = 120,
+  signal?: AbortSignal,
+): Promise<EventListResponse> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/events?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<EventListResponse>(response);
+}
+
+export async function listFindings(
+  limit = 120,
+  signal?: AbortSignal,
+): Promise<FindingListResponse> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/findings?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<FindingListResponse>(response);
+}
+
+export async function getAssetPivot(
+  id: string,
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<AssetPivot> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/assets/${encodeURIComponent(id)}/pivot?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<AssetPivot>(response);
 }

@@ -147,3 +147,59 @@ export type HuntRunResult = {
   events: EvidenceEvent[];
   executed_at: string;
 };
+
+export type TelemetryEvent = {
+  event_id: string;
+  schema_version: string;
+  timestamp: string;
+  received_at: string;
+  source: {
+    type: string;
+    vendor?: string;
+    collector: string;
+  };
+  asset?: {
+    id: string;
+    hostname: string;
+    zone: string;
+  };
+  actor?: {
+    id: string;
+    type: string;
+    name: string;
+  };
+  event: {
+    category: string;
+    action: string;
+    outcome?: string;
+  };
+  network?: {
+    source_ip?: string;
+    destination_ip?: string;
+    destination_port?: number;
+    destination_zone?: string;
+    protocol?: string;
+  };
+  labels?: Record<string, string>;
+};
+
+export type EventListResponse = {
+  count: number;
+  events: TelemetryEvent[];
+};
+
+export type FindingListResponse = {
+  count: number;
+  findings: Finding[];
+};
+
+export type AssetPivot = {
+  id: string;
+  hostname: string;
+  zone: string;
+  criticality: string;
+  first_seen_at?: string;
+  last_seen_at?: string;
+  recent_events: EvidenceEvent[];
+  findings: Finding[];
+};

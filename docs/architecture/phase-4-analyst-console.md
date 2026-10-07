@@ -290,9 +290,39 @@ The development console currently sends the existing Phase 3 development actor i
 
 The running Threat Hunt Canvas has been captured into the Phase 4 Figma file as an editable implementation reference.
 
+## Live Environment integration
+
+The Environment workspace is now backed by persisted Sentinel data rather than representative topology data.
+
+It loads:
+
+- recent telemetry from `GET /api/v1/events`;
+- recent findings from `GET /api/v1/findings`;
+- live asset pivots from `GET /api/v1/assets/{id}/pivot`.
+
+The UI derives its environment model from those persisted records.
+
+Current behaviour includes:
+
+- real asset nodes reconstructed from telemetry;
+- destination endpoints promoted into zone nodes when telemetry identifies a destination zone;
+- automatic grouping into Corporate IT, Security/DMZ, and OT;
+- finding severity mapped into node state;
+- identity context derived from the latest actor associated with an asset;
+- a 15-second live refresh cycle;
+- manual refresh;
+- search across asset, identity, IP, and zone context;
+- real asset-pivot event/finding counts;
+- real linked-finding context;
+- a flow ledger reconstructed from persisted event relationships;
+- incident replay generated from real recent telemetry rather than hard-coded events;
+- detection IDs attached to replay steps when an event belongs to a persisted finding.
+
+The Environment screen now represents the current synthetic lab data actually held by Sentinel. Empty security zones are shown honestly instead of being filled with placeholder assets.
+
 ## Next frontend work
 
-1. connect the Environment workspace to real asset, identity, finding, and event APIs;
+1. [x] connect the Environment workspace to real asset, identity, finding, and event APIs;
 2. [x] build the Investigation Graph on top of Phase 3 investigations and timelines;
 3. [x] build the Threat Hunt Canvas against the typed saved-hunt API;
 4. connect overview metrics and findings to real gateway endpoints;

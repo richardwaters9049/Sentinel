@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Bell,
   ChevronRight,
+  CircleDot,
   CirclePause,
   CirclePlay,
   Clock3,
@@ -15,13 +16,13 @@ import {
   Laptop,
   Network,
   Radar,
+  RefreshCcw,
   RotateCcw,
   Search,
   Server,
   Shield,
   ShieldCheck,
   SquareTerminal,
-  UserRound,
   Waypoints,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -33,191 +34,54 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import {
+  getAssetPivot,
+  listEvents,
+  listFindings,
+} from "@/lib/sentinel/client";
+import type {
+  AssetPivot,
+  Finding,
+  TelemetryEvent,
+} from "@/lib/sentinel/types";
 
 type Zone = "corporate" | "dmz" | "ot";
 type AssetState = "healthy" | "observed" | "elevated" | "critical";
 
-type Asset = {
+type EnvironmentNode = {
   id: string;
+  assetID?: string;
   name: string;
   subtitle: string;
   zone: Zone;
   state: AssetState;
-  icon: typeof Laptop;
   ip: string;
   identity?: string;
+  identityType?: string;
   lastSeen: string;
-  findings: number;
+  lastSeenAt: string;
+  findings: Finding[];
+  source: "asset" | "endpoint";
+  icon: typeof Laptop;
 };
 
-type ReplayEvent = {
+type Flow = {
   id: string;
-  time: string;
-  title: string;
-  detail: string;
-  source: string;
-  target: string;
-  detection?: string;
-  severity?: "medium" | "high";
+  timestamp: string;
+  sourceNodeID?: string;
+  sourceLabel: string;
+  destinationNodeID?: string;
+  destinationLabel: string;
+  category: string;
+  action: string;
+  port?: number;
+  protocol?: string;
+  detection?: Finding;
+  event: TelemetryEvent;
 };
-
-const assets: Asset[] = [
-  {
-    id: "employee-ws-01",
-    name: "Employee WS-01",
-    subtitle: "Corporate workstation",
-    zone: "corporate",
-    state: "elevated",
-    icon: Laptop,
-    ip: "10.10.10.44",
-    identity: "operator-07",
-    lastSeen: "8s ago",
-    findings: 1,
-  },
-  {
-    id: "identity-01",
-    name: "Identity Server",
-    subtitle: "Directory services",
-    zone: "corporate",
-    state: "observed",
-    icon: Fingerprint,
-    ip: "10.10.10.10",
-    lastSeen: "4s ago",
-    findings: 1,
-  },
-  {
-    id: "app-01",
-    name: "Application Server",
-    subtitle: "Internal services",
-    zone: "corporate",
-    state: "healthy",
-    icon: Server,
-    ip: "10.10.10.20",
-    lastSeen: "11s ago",
-    findings: 0,
-  },
-  {
-    id: "jump-host-01",
-    name: "Jump Host",
-    subtitle: "Approved security path",
-    zone: "dmz",
-    state: "observed",
-    icon: SquareTerminal,
-    ip: "10.20.0.10",
-    identity: "svc-backup",
-    lastSeen: "6s ago",
-    findings: 1,
-  },
-  {
-    id: "historian-01",
-    name: "Historian",
-    subtitle: "Process data archive",
-    zone: "dmz",
-    state: "healthy",
-    icon: Database,
-    ip: "10.20.0.20",
-    lastSeen: "15s ago",
-    findings: 0,
-  },
-  {
-    id: "gateway-01",
-    name: "Telemetry Gateway",
-    subtitle: "Collector edge",
-    zone: "dmz",
-    state: "healthy",
-    icon: Radar,
-    ip: "10.20.0.30",
-    lastSeen: "2s ago",
-    findings: 0,
-  },
-  {
-    id: "engineering-ws-01",
-    name: "Engineering WS",
-    subtitle: "OT engineering station",
-    zone: "ot",
-    state: "critical",
-    icon: Cpu,
-    ip: "10.30.0.12",
-    identity: "svc-backup",
-    lastSeen: "3s ago",
-    findings: 2,
-  },
-  {
-    id: "hmi-01",
-    name: "HMI-01",
-    subtitle: "Operator interface",
-    zone: "ot",
-    state: "observed",
-    icon: UserRound,
-    ip: "10.30.0.20",
-    lastSeen: "5s ago",
-    findings: 0,
-  },
-  {
-    id: "plc-01",
-    name: "PLC-01",
-    subtitle: "Synthetic controller",
-    zone: "ot",
-    state: "critical",
-    icon: Network,
-    ip: "10.30.0.40",
-    lastSeen: "1s ago",
-    findings: 1,
-  },
-];
-
-const replayEvents: ReplayEvent[] = [
-  {
-    id: "evt-01",
-    time: "21:41:02",
-    title: "Authentication failures begin",
-    detail: "operator-07 generated repeated failed logins from Employee WS-01.",
-    source: "employee-ws-01",
-    target: "identity-01",
-  },
-  {
-    id: "evt-02",
-    time: "21:41:33",
-    title: "Authentication succeeds",
-    detail: "Successful authentication follows the failure burst.",
-    source: "employee-ws-01",
-    target: "identity-01",
-    detection: "DET-AUTH-001",
-    severity: "medium",
-  },
-  {
-    id: "evt-03",
-    time: "21:42:06",
-    title: "Service identity appears interactively",
-    detail: "svc-backup is observed on the approved jump host.",
-    source: "identity-01",
-    target: "jump-host-01",
-    detection: "DET-AUTH-002",
-    severity: "high",
-  },
-  {
-    id: "evt-04",
-    time: "21:42:39",
-    title: "Corporate path crosses into OT",
-    detail: "The service identity reaches the engineering workstation.",
-    source: "jump-host-01",
-    target: "engineering-ws-01",
-    detection: "DET-NET-001",
-    severity: "high",
-  },
-  {
-    id: "evt-05",
-    time: "21:43:10",
-    title: "PLC communication observed",
-    detail: "Engineering WS communicates with PLC-01 over TCP/502.",
-    source: "engineering-ws-01",
-    target: "plc-01",
-    detection: "DET-NET-001",
-    severity: "high",
-  },
-];
 
 const zoneMeta = {
   corporate: {
@@ -241,7 +105,75 @@ const zoneMeta = {
     border: "border-amber-300/20",
     bg: "from-amber-400/[0.06] to-transparent",
   },
-} satisfies Record<Zone, { label: string; subtitle: string; accent: string; border: string; bg: string }>;
+} satisfies Record<
+  Zone,
+  {
+    label: string;
+    subtitle: string;
+    accent: string;
+    border: string;
+    bg: string;
+  }
+>;
+
+function normaliseZone(value?: string): Zone | null {
+  const zone = value?.trim().toLowerCase();
+  if (!zone) return null;
+  if (zone === "corporate" || zone === "corp" || zone === "it") {
+    return "corporate";
+  }
+  if (zone === "dmz" || zone === "security") return "dmz";
+  if (zone === "ot" || zone === "ics") return "ot";
+  return null;
+}
+
+function formatRelative(value: string) {
+  const diff = Math.max(0, Date.now() - new Date(value).getTime());
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+  }).format(new Date(value));
+}
+
+function findingEventIDs(finding: Finding) {
+  const raw = finding.evidence.event_ids;
+  return Array.isArray(raw)
+    ? raw.filter((value): value is string => typeof value === "string")
+    : [];
+}
+
+function nodeIcon(event: TelemetryEvent, zone: Zone) {
+  if (zone === "ot") {
+    return event.asset?.hostname?.toLowerCase().includes("plc") ? Network : Cpu;
+  }
+  if (event.source.type === "identity") return Fingerprint;
+  if (event.source.type === "server") return Server;
+  if (event.source.type === "gateway") return Radar;
+  if (event.source.type === "database") return Database;
+  if (event.asset?.hostname?.toLowerCase().includes("jump")) {
+    return SquareTerminal;
+  }
+  return Laptop;
+}
+
+function severityState(findings: Finding[]): AssetState {
+  if (findings.some((finding) => finding.severity === "critical")) {
+    return "critical";
+  }
+  if (findings.some((finding) => finding.severity === "high")) {
+    return "critical";
+  }
+  if (findings.some((finding) => finding.severity === "medium")) {
+    return "elevated";
+  }
+  return findings.length > 0 ? "observed" : "healthy";
+}
 
 function stateClasses(state: AssetState) {
   switch (state) {
@@ -272,26 +204,174 @@ function stateClasses(state: AssetState) {
   }
 }
 
+function buildEnvironment(events: TelemetryEvent[], findings: Finding[]) {
+  const findingByEvent = new Map<string, Finding[]>();
+  for (const finding of findings) {
+    for (const eventID of findingEventIDs(finding)) {
+      const current = findingByEvent.get(eventID) ?? [];
+      current.push(finding);
+      findingByEvent.set(eventID, current);
+    }
+  }
+
+  const nodes = new Map<string, EnvironmentNode>();
+  const eventNode = new Map<string, string>();
+
+  for (const event of events) {
+    if (event.asset) {
+      const zone = normaliseZone(event.asset.zone);
+      if (zone) {
+        const id = `asset:${event.asset.id}`;
+        const relatedFindings = findingByEvent.get(event.event_id) ?? [];
+        const previous = nodes.get(id);
+        const mergedFindings = [
+          ...(previous?.findings ?? []),
+          ...relatedFindings.filter(
+            (candidate) =>
+              !(previous?.findings ?? []).some(
+                (existing) => existing.id === candidate.id,
+              ),
+          ),
+        ];
+        const sourceIP =
+          event.network?.source_ip || previous?.ip || "No source IP";
+        nodes.set(id, {
+          id,
+          assetID: event.asset.id,
+          name: event.asset.hostname || event.asset.id,
+          subtitle:
+            zone === "ot"
+              ? "Observed OT asset"
+              : zone === "dmz"
+                ? "Observed DMZ asset"
+                : "Observed corporate asset",
+          zone,
+          state: severityState(mergedFindings),
+          ip: sourceIP,
+          identity: event.actor?.name || previous?.identity,
+          identityType: event.actor?.type || previous?.identityType,
+          lastSeen: formatRelative(event.timestamp),
+          lastSeenAt: event.timestamp,
+          findings: mergedFindings,
+          source: "asset",
+          icon: nodeIcon(event, zone),
+        });
+        eventNode.set(event.event_id, id);
+      }
+    }
+
+    const destinationZone = normaliseZone(event.network?.destination_zone);
+    const destinationIP = event.network?.destination_ip;
+    if (destinationZone && destinationIP) {
+      const id = `endpoint:${destinationIP}`;
+      const relatedFindings = findingByEvent.get(event.event_id) ?? [];
+      const previous = nodes.get(id);
+      const mergedFindings = [
+        ...(previous?.findings ?? []),
+        ...relatedFindings.filter(
+          (candidate) =>
+            !(previous?.findings ?? []).some(
+              (existing) => existing.id === candidate.id,
+            ),
+        ),
+      ];
+      nodes.set(id, {
+        id,
+        name:
+          destinationZone === "ot"
+            ? `OT endpoint ${destinationIP}`
+            : `Network endpoint ${destinationIP}`,
+        subtitle: `Observed destination · ${destinationZone.toUpperCase()}`,
+        zone: destinationZone,
+        state: severityState(mergedFindings),
+        ip: destinationIP,
+        lastSeen: formatRelative(event.timestamp),
+        lastSeenAt: event.timestamp,
+        findings: mergedFindings,
+        source: "endpoint",
+        icon: destinationZone === "ot" ? Network : Server,
+      });
+    }
+  }
+
+  const orderedNodes = [...nodes.values()]
+    .sort(
+      (a, b) =>
+        new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime(),
+    )
+    .slice(0, 18);
+
+  const visibleIDs = new Set(orderedNodes.map((node) => node.id));
+  const flows: Flow[] = [];
+
+  for (const event of [...events].reverse()) {
+    const sourceID = eventNode.get(event.event_id);
+    const destinationIP = event.network?.destination_ip;
+    const destinationID = destinationIP
+      ? `endpoint:${destinationIP}`
+      : undefined;
+    const detection = (findingByEvent.get(event.event_id) ?? [])[0];
+
+    if (!sourceID && !destinationID && !detection) continue;
+    if (
+      sourceID &&
+      !visibleIDs.has(sourceID) &&
+      destinationID &&
+      !visibleIDs.has(destinationID)
+    ) {
+      continue;
+    }
+
+    flows.push({
+      id: event.event_id,
+      timestamp: event.timestamp,
+      sourceNodeID: sourceID,
+      sourceLabel:
+        event.asset?.hostname ||
+        event.actor?.name ||
+        event.network?.source_ip ||
+        "Unknown source",
+      destinationNodeID: destinationID,
+      destinationLabel:
+        destinationIP ||
+        event.actor?.name ||
+        event.event.action ||
+        "Observed activity",
+      category: event.event.category,
+      action: event.event.action,
+      port: event.network?.destination_port,
+      protocol: event.network?.protocol,
+      detection,
+      event,
+    });
+  }
+
+  return {
+    nodes: orderedNodes,
+    flows: flows.slice(-12),
+  };
+}
+
 function AssetNode({
-  asset,
+  node,
   selected,
   active,
   onSelect,
 }: {
-  asset: Asset;
+  node: EnvironmentNode;
   selected: boolean;
   active: boolean;
   onSelect: () => void;
 }) {
-  const Icon = asset.icon;
-  const classes = stateClasses(asset.state);
+  const Icon = node.icon;
+  const classes = stateClasses(node.state);
 
   return (
     <motion.button
       type="button"
       onClick={onSelect}
       animate={{
-        scale: active ? 1.025 : 1,
+        scale: active ? 1.022 : 1,
         y: active ? -2 : 0,
       }}
       transition={{ type: "spring", stiffness: 300, damping: 24 }}
@@ -320,25 +400,26 @@ function AssetNode({
         </div>
         <div className="flex items-center gap-1.5 text-[0.6rem] font-semibold tracking-[0.08em] text-slate-600">
           <span className={cn("size-1.5 rounded-full", classes.dot)} />
-          {asset.state.toUpperCase()}
+          {node.state.toUpperCase()}
         </div>
       </div>
 
-      <div className="mt-3 text-[0.78rem] font-semibold tracking-[0.01em] text-slate-200">
-        {asset.name}
+      <div className="mt-3 truncate text-[0.78rem] font-semibold tracking-[0.01em] text-slate-200">
+        {node.name}
       </div>
-      <div className="mt-1 text-[0.65rem] leading-5 tracking-[0.02em] text-slate-600">
-        {asset.subtitle}
+      <div className="mt-1 truncate text-[0.65rem] leading-5 tracking-[0.02em] text-slate-600">
+        {node.subtitle}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[0.6rem] text-slate-600">
-        <span>{asset.ip}</span>
-        {asset.findings > 0 ? (
-          <span className="rounded-md bg-rose-400/10 px-1.5 py-0.5 text-rose-300">
-            {asset.findings} finding{asset.findings === 1 ? "" : "s"}
+        <span className="truncate">{node.ip}</span>
+        {node.findings.length > 0 ? (
+          <span className="shrink-0 rounded-md bg-rose-400/10 px-1.5 py-0.5 text-rose-300">
+            {node.findings.length} finding
+            {node.findings.length === 1 ? "" : "s"}
           </span>
         ) : (
-          <span>{asset.lastSeen}</span>
+          <span className="shrink-0">{node.lastSeen}</span>
         )}
       </div>
     </motion.button>
@@ -347,15 +428,15 @@ function AssetNode({
 
 function ZoneColumn({
   zone,
-  assetsInZone,
-  selectedId,
-  activeIds,
+  nodes,
+  selectedID,
+  activeIDs,
   onSelect,
 }: {
   zone: Zone;
-  assetsInZone: Asset[];
-  selectedId: string;
-  activeIds: Set<string>;
+  nodes: EnvironmentNode[];
+  selectedID: string;
+  activeIDs: Set<string>;
   onSelect: (id: string) => void;
 }) {
   const meta = zoneMeta[zone];
@@ -363,13 +444,18 @@ function ZoneColumn({
   return (
     <div
       className={cn(
-        "relative rounded-[1.4rem] border bg-gradient-to-b p-3.5",
+        "relative min-h-[250px] rounded-[1.4rem] border bg-gradient-to-b p-3.5",
         meta.border,
         meta.bg,
       )}
     >
       <div className="mb-4 border-b border-slate-800/65 pb-3">
-        <div className={cn("text-[0.72rem] font-bold tracking-[0.12em]", meta.accent)}>
+        <div
+          className={cn(
+            "text-[0.72rem] font-bold tracking-[0.12em]",
+            meta.accent,
+          )}
+        >
           {meta.label.toUpperCase()}
         </div>
         <div className="mt-1 text-[0.64rem] leading-5 tracking-[0.02em] text-slate-600">
@@ -378,45 +464,163 @@ function ZoneColumn({
       </div>
 
       <div className="grid gap-3">
-        {assetsInZone.map((asset) => (
-          <AssetNode
-            key={asset.id}
-            asset={asset}
-            selected={asset.id === selectedId}
-            active={activeIds.has(asset.id)}
-            onSelect={() => onSelect(asset.id)}
-          />
-        ))}
+        {nodes.length > 0 ? (
+          nodes.map((node) => (
+            <AssetNode
+              key={node.id}
+              node={node}
+              selected={node.id === selectedID}
+              active={activeIDs.has(node.id)}
+              onSelect={() => onSelect(node.id)}
+            />
+          ))
+        ) : (
+          <div className="grid min-h-36 place-items-center rounded-xl border border-dashed border-slate-800/75 text-center">
+            <div>
+              <CircleDot className="mx-auto size-4 text-slate-700" />
+              <div className="mt-2 text-[0.65rem] text-slate-600">
+                No recent telemetry in this zone
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export default function EnvironmentWorkspace() {
-  const [selectedId, setSelectedId] = useState("engineering-ws-01");
-  const [step, setStep] = useState(4);
+  const [events, setEvents] = useState<TelemetryEvent[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [selectedID, setSelectedID] = useState("");
+  const [pivot, setPivot] = useState<AssetPivot | null>(null);
+  const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
-  const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
-  const currentEvent = replayEvents[Math.min(step, replayEvents.length - 1)];
+  const environment = useMemo(
+    () => buildEnvironment(events, findings),
+    [events, findings],
+  );
 
-  const activeIds = useMemo(() => {
+  const filteredNodes = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return environment.nodes;
+    return environment.nodes.filter((node) =>
+      [
+        node.name,
+        node.ip,
+        node.identity,
+        node.identityType,
+        node.zone,
+        node.assetID,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term)),
+    );
+  }, [environment.nodes, search]);
+
+  const selected =
+    environment.nodes.find((node) => node.id === selectedID) ??
+    environment.nodes[0];
+
+  const replayFlows = environment.flows;
+  const safeStep = Math.min(step, Math.max(0, replayFlows.length - 1));
+  const currentFlow = replayFlows[safeStep];
+  const selectedPivot =
+    selected?.assetID && pivot?.id === selected.assetID ? pivot : null;
+
+  const activeIDs = useMemo(() => {
     const ids = new Set<string>();
-    for (let index = 0; index <= step; index += 1) {
-      const event = replayEvents[index];
-      if (!event) continue;
-      ids.add(event.source);
-      ids.add(event.target);
+    for (let index = 0; index <= safeStep; index += 1) {
+      const flow = replayFlows[index];
+      if (!flow) continue;
+      if (flow.sourceNodeID) ids.add(flow.sourceNodeID);
+      if (flow.destinationNodeID) ids.add(flow.destinationNodeID);
     }
     return ids;
-  }, [step]);
+  }, [replayFlows, safeStep]);
+
+  async function refreshEnvironment() {
+    setLoading(true);
+    setError("");
+
+    const controller = new AbortController();
+    try {
+      const [eventResponse, findingResponse] = await Promise.all([
+        listEvents(160, controller.signal),
+        listFindings(160, controller.signal),
+      ]);
+      setEvents(eventResponse.events);
+      setFindings(findingResponse.findings);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not load the Northstar environment",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (!playing) return;
+    const controller = new AbortController();
+
+    void Promise.all([
+      listEvents(160, controller.signal),
+      listFindings(160, controller.signal),
+    ])
+      .then(([eventResponse, findingResponse]) => {
+        setEvents(eventResponse.events);
+        setFindings(findingResponse.findings);
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Could not load the Northstar environment",
+        );
+      })
+      .finally(() => setLoading(false));
+
+    const timer = window.setInterval(() => {
+      void Promise.all([listEvents(160), listFindings(160)])
+        .then(([eventResponse, findingResponse]) => {
+          setEvents(eventResponse.events);
+          setFindings(findingResponse.findings);
+        })
+        .catch(() => {});
+    }, 15_000);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selected?.assetID) return;
+
+    const controller = new AbortController();
+    void getAssetPivot(selected.assetID, 30, controller.signal)
+      .then(setPivot)
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+      });
+
+    return () => controller.abort();
+  }, [selected?.assetID]);
+
+  useEffect(() => {
+    if (!playing || replayFlows.length === 0) return;
 
     const id = window.setInterval(() => {
       setStep((current) => {
-        if (current >= replayEvents.length - 1) {
+        if (current >= replayFlows.length - 1) {
           setPlaying(false);
           return current;
         }
@@ -425,12 +629,16 @@ export default function EnvironmentWorkspace() {
     }, 1450);
 
     return () => window.clearInterval(id);
-  }, [playing]);
+  }, [playing, replayFlows.length]);
 
   function resetReplay() {
     setPlaying(false);
     setStep(0);
   }
+
+  const detectionCount = new Set(
+    findings.map((finding) => finding.detection_id),
+  ).size;
 
   return (
     <main className="sentinel-grid sentinel-glow min-h-screen bg-[#070a0f] text-slate-100">
@@ -450,7 +658,7 @@ export default function EnvironmentWorkspace() {
                 </span>
               </div>
 
-              <div className="mt-3 flex items-center gap-2 text-[0.67rem] font-semibold tracking-[0.13em] text-cyan-300/70 ">
+              <div className="mt-3 flex items-center gap-2 text-[0.67rem] font-semibold tracking-[0.13em] text-cyan-300/70">
                 <Waypoints className="size-3.5" />
                 LIVE ENVIRONMENT
               </div>
@@ -458,8 +666,9 @@ export default function EnvironmentWorkspace() {
                 Northstar attack surface
               </h1>
               <p className="mt-1.5 max-w-3xl text-[0.78rem] leading-6 tracking-[0.025em] text-slate-500">
-                Explore asset relationships, follow identity movement, and replay
-                the evidence chain that produced Sentinel findings.
+                Explore real persisted asset relationships, follow identity
+                movement, and replay the evidence chain that produced Sentinel
+                findings.
               </p>
             </div>
 
@@ -468,10 +677,21 @@ export default function EnvironmentWorkspace() {
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
                 <Input
                   aria-label="Search environment"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Find asset, identity or IP…"
                   className="h-10 border-slate-800 bg-slate-950/60 pl-10 text-[0.78rem] tracking-[0.02em] text-slate-200 placeholder:text-slate-600"
                 />
               </div>
+              <Button
+                type="button"
+                onClick={() => void refreshEnvironment()}
+                variant="outline"
+                size="icon"
+                className="cursor-pointer border-slate-800 bg-slate-950/60 text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+              >
+                <RefreshCcw className={cn("size-4", loading && "animate-spin")} />
+              </Button>
               <Button
                 variant="outline"
                 size="icon"
@@ -487,6 +707,31 @@ export default function EnvironmentWorkspace() {
             </div>
           </motion.header>
 
+          {error ? (
+            <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-400/20 bg-rose-400/[0.06] p-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="size-4 text-rose-300" />
+                <div>
+                  <div className="text-[0.76rem] font-semibold text-rose-200">
+                    Environment telemetry unavailable
+                  </div>
+                  <div className="mt-1 text-[0.65rem] text-rose-200/55">
+                    {error}
+                  </div>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={() => void refreshEnvironment()}
+                variant="outline"
+                size="sm"
+                className="cursor-pointer border-rose-400/20 bg-rose-400/[0.05] text-rose-200 hover:bg-rose-400/10"
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -494,10 +739,15 @@ export default function EnvironmentWorkspace() {
             className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
           >
             {[
-              ["9", "visible assets", "text-sky-300", Shield],
-              ["3", "security zones", "text-violet-300", GitBranch],
-              ["5", "replay events", "text-amber-200", Clock3],
-              ["3", "active detections", "text-rose-300", AlertTriangle],
+              [environment.nodes.length, "visible nodes", "text-sky-300", Shield],
+              [
+                new Set(environment.nodes.map((node) => node.zone)).size,
+                "active zones",
+                "text-violet-300",
+                GitBranch,
+              ],
+              [replayFlows.length, "replay events", "text-amber-200", Clock3],
+              [detectionCount, "active detections", "text-rose-300", AlertTriangle],
             ].map(([value, label, color, Icon]) => {
               const IconComponent = Icon as typeof Shield;
               return (
@@ -541,7 +791,8 @@ export default function EnvironmentWorkspace() {
                     Environment graph
                   </div>
                   <div className="mt-1 text-[0.66rem] leading-5 tracking-[0.02em] text-slate-600">
-                    Synthetic Northstar topology · click any node to pivot
+                    Derived from the latest persisted telemetry · click a node to
+                    query its live pivot
                   </div>
                 </div>
 
@@ -551,13 +802,13 @@ export default function EnvironmentWorkspace() {
                     className="border-emerald-400/25 bg-emerald-400/10 text-[0.62rem] tracking-[0.08em] text-emerald-300"
                   >
                     <span className="mr-1.5 size-1.5 rounded-full bg-emerald-400" />
-                    LIVE
+                    LIVE DATA
                   </Badge>
                   <Badge
                     variant="outline"
                     className="border-slate-700 bg-slate-950/65 text-[0.62rem] tracking-[0.06em] text-slate-500"
                   >
-                    2s telemetry delay
+                    15s refresh
                   </Badge>
                 </div>
               </div>
@@ -567,89 +818,62 @@ export default function EnvironmentWorkspace() {
                   <ZoneColumn
                     key={zone}
                     zone={zone}
-                    assetsInZone={assets.filter((asset) => asset.zone === zone)}
-                    selectedId={selectedId}
-                    activeIds={activeIds}
-                    onSelect={setSelectedId}
+                    nodes={filteredNodes.filter((node) => node.zone === zone)}
+                    selectedID={selected?.id ?? ""}
+                    activeIDs={activeIDs}
+                    onSelect={(id) => {
+                      setPivot(null);
+                      setSelectedID(id);
+                    }}
                   />
                 ))}
+              </div>
 
-                <div className="pointer-events-none absolute inset-0 hidden xl:block">
-                  <svg
-                    className="h-full w-full"
-                    viewBox="0 0 1200 590"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <linearGradient id="edgeNormal" x1="0" x2="1">
-                        <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.18" />
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.22" />
-                      </linearGradient>
-                      <linearGradient id="edgeAlert" x1="0" x2="1">
-                        <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.7" />
-                        <stop offset="100%" stopColor="#fb7185" stopOpacity="0.9" />
-                      </linearGradient>
-                    </defs>
+              <div className="relative mt-4 rounded-2xl border border-slate-800/75 bg-slate-950/25 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[0.7rem] font-semibold text-slate-300">
+                      Observed flow ledger
+                    </div>
+                    <div className="mt-1 text-[0.62rem] text-slate-600">
+                      Recent relationships reconstructed from telemetry
+                    </div>
+                  </div>
+                  <Network className="size-4 text-slate-700" />
+                </div>
 
-                    <path
-                      d="M 355 118 C 410 118 430 118 480 118"
-                      fill="none"
-                      stroke="url(#edgeNormal)"
-                      strokeWidth="2"
-                      strokeDasharray="7 8"
-                    />
-                    <path
-                      d="M 720 118 C 770 118 795 118 845 118"
-                      fill="none"
-                      stroke={step >= 3 ? "url(#edgeAlert)" : "url(#edgeNormal)"}
-                      strokeWidth={step >= 3 ? 3 : 2}
-                      strokeDasharray="7 8"
-                    />
-                    <path
-                      d="M 1012 172 C 1012 215 1012 260 1012 304"
-                      fill="none"
-                      stroke={step >= 4 ? "url(#edgeAlert)" : "url(#edgeNormal)"}
-                      strokeWidth={step >= 4 ? 3 : 2}
-                      strokeDasharray="7 8"
-                    />
-
-                    {step >= 3 ? (
-                      <motion.circle
-                        r="5"
-                        fill="#fb7185"
-                        initial={{ opacity: 0 }}
-                        animate={{
-                          opacity: [0.3, 1, 0.3],
-                          cx: [720, 845],
-                          cy: [118, 118],
-                        }}
-                        transition={{
-                          duration: 1.4,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      />
-                    ) : null}
-
-                    {step >= 4 ? (
-                      <motion.circle
-                        r="5"
-                        fill="#f59e0b"
-                        initial={{ opacity: 0 }}
-                        animate={{
-                          opacity: [0.3, 1, 0.3],
-                          cx: [1012, 1012],
-                          cy: [172, 304],
-                        }}
-                        transition={{
-                          duration: 1.1,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      />
-                    ) : null}
-                  </svg>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {replayFlows.slice(-6).map((flow) => (
+                    <div
+                      key={flow.id}
+                      className="rounded-xl border border-slate-800/70 bg-[#0a0f17] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-mono text-[0.58rem] text-slate-700">
+                          {new Date(flow.timestamp).toLocaleTimeString("en-GB")}
+                        </span>
+                        {flow.detection ? (
+                          <Badge
+                            variant="outline"
+                            className="border-rose-400/25 bg-rose-400/[0.07] text-[0.54rem] font-bold text-rose-300"
+                          >
+                            {flow.detection.detection_id}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-[0.66rem] font-medium text-slate-400">
+                        <span className="truncate">{flow.sourceLabel}</span>
+                        <ChevronRight className="size-3 shrink-0 text-slate-700" />
+                        <span className="truncate">{flow.destinationLabel}</span>
+                      </div>
+                      <div className="mt-2 font-mono text-[0.56rem] text-slate-700">
+                        {flow.category}/{flow.action}
+                        {flow.port
+                          ? ` · ${flow.protocol ?? "tcp"}:${flow.port}`
+                          : ""}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </motion.section>
@@ -665,95 +889,114 @@ export default function EnvironmentWorkspace() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-[0.64rem] font-semibold tracking-[0.11em] text-slate-600">
-                          SELECTED ASSET
+                          SELECTED NODE
                         </div>
                         <h2 className="mt-2 text-[1rem] font-semibold tracking-[-0.01em] text-white">
-                          {selected.name}
+                          {selected?.name ?? "No recent node"}
                         </h2>
                       </div>
-                      <div
-                        className={cn(
-                          "size-2.5 rounded-full",
-                          stateClasses(selected.state).dot,
-                        )}
-                      />
+                      {selected ? (
+                        <div
+                          className={cn(
+                            "size-2.5 rounded-full",
+                            stateClasses(selected.state).dot,
+                          )}
+                        />
+                      ) : null}
                     </div>
                   </CardHeader>
 
                   <Separator className="bg-slate-800/80" />
 
                   <CardContent className="space-y-4 p-5">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3">
-                        <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-slate-600">
-                          IP ADDRESS
-                        </div>
-                        <div className="mt-2 font-mono text-[0.7rem] text-slate-300">
-                          {selected.ip}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3">
-                        <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-slate-600">
-                          LAST SEEN
-                        </div>
-                        <div className="mt-2 text-[0.7rem] font-medium text-slate-300">
-                          {selected.lastSeen}
-                        </div>
-                      </div>
-                    </div>
-
-                    {selected.identity ? (
-                      <button
-                        type="button"
-                        className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-violet-400/15 bg-violet-400/[0.05] p-3 text-left transition hover:border-violet-400/35 hover:bg-violet-400/[0.08]"
-                      >
-                        <div>
-                          <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-violet-300/60">
-                            ASSOCIATED IDENTITY
+                    {selected ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3">
+                            <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-slate-600">
+                              IP ADDRESS
+                            </div>
+                            <div className="mt-2 truncate font-mono text-[0.7rem] text-slate-300">
+                              {selected.ip}
+                            </div>
                           </div>
-                          <div className="mt-1 text-[0.76rem] font-semibold text-violet-200">
-                            {selected.identity}
+                          <div className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3">
+                            <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-slate-600">
+                              LAST SEEN
+                            </div>
+                            <div className="mt-2 text-[0.7rem] font-medium text-slate-300">
+                              {selected.lastSeen}
+                            </div>
                           </div>
                         </div>
-                        <ChevronRight className="size-4 text-violet-400/60" />
-                      </button>
-                    ) : null}
 
-                    <div>
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="text-[0.66rem] font-semibold tracking-[0.08em] text-slate-600">
-                          FINDINGS
-                        </span>
-                        <span className="text-[0.72rem] font-semibold text-slate-300">
-                          {selected.findings}
-                        </span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-900">
-                        <motion.div
-                          key={selected.id}
-                          initial={{ width: 0 }}
-                          animate={{
-                            width: `${Math.min(100, selected.findings * 38)}%`,
-                          }}
-                          transition={{ duration: 0.45 }}
-                          className="h-full rounded-full bg-gradient-to-r from-amber-300 to-rose-400"
-                        />
-                      </div>
-                    </div>
+                        {selected.identity ? (
+                          <div className="rounded-xl border border-violet-400/15 bg-violet-400/[0.05] p-3">
+                            <div className="text-[0.6rem] font-semibold tracking-[0.08em] text-violet-300/60">
+                              ASSOCIATED IDENTITY
+                            </div>
+                            <div className="mt-1 text-[0.76rem] font-semibold text-violet-200">
+                              {selected.identity}
+                            </div>
+                            <div className="mt-1 text-[0.6rem] text-violet-300/45">
+                              {selected.identityType ?? "unknown identity type"}
+                            </div>
+                          </div>
+                        ) : null}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer border-slate-800 bg-slate-950/40 text-[0.72rem] text-slate-300 hover:bg-slate-900"
-                      >
-                        <Activity className="size-3.5" />
-                        View events
-                      </Button>
-                      <Button className="cursor-pointer bg-gradient-to-r from-sky-400 to-cyan-300 text-[0.72rem] font-semibold text-slate-950 hover:from-sky-300 hover:to-cyan-200">
-                        <GitBranch className="size-3.5" />
-                        Pivot
-                      </Button>
-                    </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            [
+                              selectedPivot?.recent_events.length ?? 0,
+                              "events",
+                              Activity,
+                            ],
+                            [
+                              selectedPivot?.findings.length ??
+                                selected.findings.length,
+                              "findings",
+                              AlertTriangle,
+                            ],
+                            [selected.zone.toUpperCase(), "zone", GitBranch],
+                          ].map(([value, label, Icon]) => {
+                            const IconComponent = Icon as typeof Activity;
+                            return (
+                              <div
+                                key={String(label)}
+                                className="rounded-xl border border-slate-800/75 bg-slate-950/35 p-3 text-center"
+                              >
+                                <IconComponent className="mx-auto size-3.5 text-slate-600" />
+                                <div className="mt-2 text-[0.76rem] font-semibold text-slate-300">
+                                  {String(value)}
+                                </div>
+                                <div className="mt-1 text-[0.54rem] font-semibold tracking-[0.08em] text-slate-700">
+                                  {String(label).toUpperCase()}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {selectedPivot?.findings[0] ? (
+                          <div className="rounded-xl border border-rose-400/20 bg-rose-400/[0.05] p-3">
+                            <div className="text-[0.58rem] font-semibold tracking-[0.09em] text-rose-300/65">
+                              LATEST LINKED FINDING
+                            </div>
+                            <div className="mt-2 text-[0.72rem] font-semibold leading-5 text-rose-100">
+                              {selectedPivot.findings[0].title}
+                            </div>
+                            <div className="mt-2 font-mono text-[0.58rem] text-rose-300/55">
+                              {selectedPivot.findings[0].detection_id} ·{" "}
+                              {selectedPivot.findings[0].confidence}% confidence
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="py-8 text-center text-[0.7rem] text-slate-600">
+                        No recent environment data.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -768,29 +1011,33 @@ export default function EnvironmentWorkspace() {
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="size-4 text-rose-300" />
                       <span className="text-[0.67rem] font-bold tracking-[0.11em] text-rose-300">
-                        WHY SENTINEL FLAGGED THIS
+                        LIVE DETECTION CONTEXT
                       </span>
                     </div>
                   </CardHeader>
                   <Separator className="bg-rose-400/10" />
                   <CardContent className="space-y-3 p-5">
-                    {[
-                      "Source crossed a security-zone boundary",
-                      "Service identity used interactively",
-                      "Destination exposed TCP/502",
-                      "Relationship not previously observed",
-                    ].map((reason, index) => (
-                      <motion.div
-                        key={reason}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.25 + index * 0.06 }}
-                        className="flex items-start gap-2.5 text-[0.7rem] leading-5 tracking-[0.02em] text-slate-400"
-                      >
-                        <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
-                        {reason}
-                      </motion.div>
-                    ))}
+                    {selected?.findings.length ? (
+                      selected.findings.slice(0, 3).map((finding) => (
+                        <div key={finding.id}>
+                          <div className="flex items-start gap-2.5 text-[0.7rem] leading-5 tracking-[0.02em] text-slate-400">
+                            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
+                            <span>
+                              {finding.title}
+                              <span className="mt-1 block font-mono text-[0.58rem] text-slate-700">
+                                {finding.detection_id} · {finding.severity} ·{" "}
+                                {finding.confidence}%
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-[0.68rem] leading-5 text-slate-600">
+                        No findings are currently linked to this node in the
+                        recent evidence window.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -811,18 +1058,20 @@ export default function EnvironmentWorkspace() {
                   INCIDENT REPLAY
                 </div>
                 <h2 className="mt-3 text-[1.1rem] font-semibold tracking-[-0.015em] text-white">
-                  Reconstruct the attack path
+                  Reconstruct persisted activity
                 </h2>
                 <p className="mt-2 text-[0.7rem] leading-5 tracking-[0.025em] text-slate-500">
-                  Replay correlated evidence in order and watch the environment
-                  graph illuminate as the incident develops.
+                  Replay the most recent telemetry relationships in chronological
+                  order. Detection context is attached when the underlying event
+                  belongs to a finding.
                 </p>
 
                 <div className="mt-5 flex items-center gap-2">
                   <Button
                     type="button"
                     onClick={() => setPlaying((value) => !value)}
-                    className="cursor-pointer bg-gradient-to-r from-amber-300 to-orange-300 text-[0.72rem] font-semibold text-slate-950 hover:from-amber-200 hover:to-orange-200"
+                    disabled={replayFlows.length === 0}
+                    className="cursor-pointer bg-gradient-to-r from-amber-300 to-orange-300 text-[0.72rem] font-semibold text-slate-950 hover:from-amber-200 hover:to-orange-200 disabled:cursor-not-allowed"
                   >
                     {playing ? (
                       <CirclePause className="size-4" />
@@ -844,13 +1093,15 @@ export default function EnvironmentWorkspace() {
 
                 <div className="mt-5">
                   <div className="mb-2 flex items-center justify-between text-[0.61rem] font-semibold tracking-[0.07em] text-slate-600">
-                    <span>EVENT {step + 1}</span>
-                    <span>{replayEvents.length}</span>
+                    <span>EVENT {replayFlows.length ? step + 1 : 0}</span>
+                    <span>{replayFlows.length}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-900">
                     <motion.div
                       animate={{
-                        width: `${((step + 1) / replayEvents.length) * 100}%`,
+                        width: replayFlows.length
+                          ? `${((step + 1) / replayFlows.length) * 100}%`
+                          : "0%",
                       }}
                       transition={{ duration: 0.35 }}
                       className="h-full rounded-full bg-gradient-to-r from-amber-300 via-orange-300 to-rose-400"
@@ -860,116 +1111,131 @@ export default function EnvironmentWorkspace() {
               </div>
 
               <div className="min-w-0 border-b border-slate-800/80 p-4 xl:border-b-0 xl:border-r">
-                <div className="space-y-1">
-                  {replayEvents.map((event, index) => {
-                    const past = index <= step;
-                    const current = index === step;
+                <ScrollArea className="h-[430px]">
+                  <div className="space-y-1">
+                    {replayFlows.map((flow, index) => {
+                      const past = index <= safeStep;
+                      const current = index === safeStep;
 
-                    return (
-                      <button
-                        key={event.id}
-                        type="button"
-                        onClick={() => {
-                          setPlaying(false);
-                          setStep(index);
-                        }}
-                        className={cn(
-                          "grid w-full cursor-pointer grid-cols-[66px_18px_minmax(0,1fr)] gap-2 rounded-xl px-3 py-3 text-left transition",
-                          current
-                            ? "bg-amber-300/[0.07]"
-                            : "hover:bg-slate-900/55",
-                          !past && "opacity-40",
-                        )}
-                      >
-                        <span className="font-mono text-[0.61rem] text-slate-600">
-                          {event.time}
-                        </span>
-                        <span className="relative mt-1.5 flex justify-center">
-                          <span
-                            className={cn(
-                              "z-10 size-2 rounded-full",
-                              current
-                                ? "bg-amber-300 shadow-[0_0_16px_rgba(251,191,36,0.8)]"
-                                : past
-                                  ? "bg-sky-400"
-                                  : "bg-slate-700",
-                            )}
-                          />
-                          {index < replayEvents.length - 1 ? (
-                            <span className="absolute top-2 h-10 w-px bg-slate-800" />
-                          ) : null}
-                        </span>
-                        <span>
-                          <span
-                            className={cn(
-                              "block text-[0.75rem] font-semibold tracking-[0.01em]",
-                              current ? "text-amber-100" : "text-slate-300",
-                            )}
-                          >
-                            {event.title}
+                      return (
+                        <button
+                          key={flow.id}
+                          type="button"
+                          onClick={() => {
+                            setPlaying(false);
+                            setStep(index);
+                          }}
+                          className={cn(
+                            "grid w-full cursor-pointer grid-cols-[66px_18px_minmax(0,1fr)] gap-2 rounded-xl px-3 py-3 text-left transition",
+                            current
+                              ? "bg-amber-300/[0.07]"
+                              : "hover:bg-slate-900/55",
+                            !past && "opacity-40",
+                          )}
+                        >
+                          <span className="font-mono text-[0.61rem] text-slate-600">
+                            {new Date(flow.timestamp).toLocaleTimeString("en-GB")}
                           </span>
-                          <span className="mt-1 block text-[0.65rem] leading-5 tracking-[0.02em] text-slate-600">
-                            {event.detail}
+                          <span className="relative mt-1.5 flex justify-center">
+                            <span
+                              className={cn(
+                                "z-10 size-2 rounded-full",
+                                current
+                                  ? "bg-amber-300 shadow-[0_0_16px_rgba(251,191,36,0.8)]"
+                                  : flow.detection
+                                    ? "bg-rose-400"
+                                    : past
+                                      ? "bg-sky-400"
+                                      : "bg-slate-700",
+                              )}
+                            />
+                            {index < replayFlows.length - 1 ? (
+                              <span className="absolute top-2 h-10 w-px bg-slate-800" />
+                            ) : null}
                           </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <span>
+                            <span
+                              className={cn(
+                                "block text-[0.75rem] font-semibold tracking-[0.01em]",
+                                current
+                                  ? "text-amber-100"
+                                  : "text-slate-300",
+                              )}
+                            >
+                              {flow.sourceLabel} → {flow.destinationLabel}
+                            </span>
+                            <span className="mt-1 block text-[0.65rem] leading-5 tracking-[0.02em] text-slate-600">
+                              {flow.category}/{flow.action}
+                              {flow.detection
+                                ? ` · ${flow.detection.detection_id}`
+                                : ""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
               </div>
 
               <div className="p-5">
                 <AnimatePresence mode="wait">
-                  <motion.div
-                    key={currentEvent.id}
-                    initial={{ opacity: 0, x: 12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -12 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <div className="text-[0.62rem] font-semibold tracking-[0.1em] text-slate-600">
-                      CURRENT EVIDENCE
-                    </div>
-                    <div className="mt-3 text-[0.88rem] font-semibold leading-6 text-white">
-                      {currentEvent.title}
-                    </div>
-                    <div className="mt-2 text-[0.68rem] leading-5 tracking-[0.02em] text-slate-500">
-                      {currentEvent.detail}
-                    </div>
-
-                    <div className="mt-4 rounded-xl border border-slate-800/80 bg-slate-950/45 p-3">
-                      <div className="flex items-center gap-2 font-mono text-[0.64rem] text-slate-400">
-                        <span>{currentEvent.source}</span>
-                        <ChevronRight className="size-3 text-slate-700" />
-                        <span>{currentEvent.target}</span>
+                  {currentFlow ? (
+                    <motion.div
+                      key={currentFlow.id}
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -12 }}
+                      transition={{ duration: 0.25 }}
+                    >
+                      <div className="text-[0.62rem] font-semibold tracking-[0.1em] text-slate-600">
+                        CURRENT EVIDENCE
                       </div>
-                    </div>
+                      <div className="mt-3 text-[0.88rem] font-semibold leading-6 text-white">
+                        {currentFlow.event.event.category} /{" "}
+                        {currentFlow.event.event.action}
+                      </div>
+                      <div className="mt-2 text-[0.68rem] leading-5 tracking-[0.02em] text-slate-500">
+                        {currentFlow.sourceLabel} communicated with or produced
+                        activity toward {currentFlow.destinationLabel}.
+                      </div>
 
-                    {currentEvent.detection ? (
-                      <div className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/[0.05] p-3">
-                        <div className="text-[0.6rem] font-semibold tracking-[0.09em] text-rose-300/70">
-                          DETECTION
-                        </div>
-                        <div className="mt-1.5 font-mono text-[0.72rem] font-semibold text-rose-200">
-                          {currentEvent.detection}
+                      <div className="mt-4 rounded-xl border border-slate-800/80 bg-slate-950/45 p-3">
+                        <div className="flex items-center gap-2 font-mono text-[0.64rem] text-slate-400">
+                          <span className="truncate">
+                            {currentFlow.sourceLabel}
+                          </span>
+                          <ChevronRight className="size-3 shrink-0 text-slate-700" />
+                          <span className="truncate">
+                            {currentFlow.destinationLabel}
+                          </span>
                         </div>
                       </div>
-                    ) : null}
 
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer border-slate-800 bg-slate-950/45 text-[0.68rem] text-slate-300 hover:bg-slate-900"
-                      >
-                        <Network className="size-3.5" />
-                        Pivot path
-                      </Button>
-                      <Button className="cursor-pointer bg-gradient-to-r from-violet-400 to-sky-400 text-[0.68rem] font-semibold text-slate-950 hover:from-violet-300 hover:to-sky-300">
-                        <ShieldCheck className="size-3.5" />
-                        Investigate
-                      </Button>
+                      {currentFlow.detection ? (
+                        <div className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/[0.05] p-3">
+                          <div className="text-[0.6rem] font-semibold tracking-[0.09em] text-rose-300/70">
+                            DETECTION
+                          </div>
+                          <div className="mt-1.5 font-mono text-[0.72rem] font-semibold text-rose-200">
+                            {currentFlow.detection.detection_id}
+                          </div>
+                          <div className="mt-1.5 text-[0.63rem] leading-5 text-rose-200/60">
+                            {currentFlow.detection.title}
+                          </div>
+                        </div>
+                      ) : null}
+                    </motion.div>
+                  ) : (
+                    <div className="grid min-h-56 place-items-center text-center">
+                      <div>
+                        <Activity className="mx-auto size-5 text-slate-700" />
+                        <div className="mt-3 text-[0.72rem] text-slate-600">
+                          No replayable activity in the current telemetry window.
+                        </div>
+                      </div>
                     </div>
-                  </motion.div>
+                  )}
                 </AnimatePresence>
               </div>
             </div>
