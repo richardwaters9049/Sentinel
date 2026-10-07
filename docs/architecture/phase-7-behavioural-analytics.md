@@ -78,7 +78,7 @@ Feature engineering is explicit in code rather than hidden inside a serialized p
 
 ## Baseline
 
-The first baseline models enterprise-style Northstar activity:
+The first model retains a deterministic synthetic Northstar reference baseline:
 
 - weekday activity;
 - typical daytime hours;
@@ -89,9 +89,37 @@ The first baseline models enterprise-style Northstar activity:
 - rare corporate-to-DMZ activity;
 - no assumption that anomaly equals maliciousness.
 
-This initial baseline is synthetic and repository-owned.
+Phase 7 now also derives rolling entity context directly from persisted Sentinel telemetry before the current event is scored.
 
-Later Phase 7 work should add entity-specific and rolling baselines derived from persisted Sentinel telemetry.
+The entity key is selected in this order:
+
+1. identity;
+2. asset;
+3. collector.
+
+The bounded rolling windows are:
+
+```text
+60 minutes
+24 hours
+```
+
+The current rolling context includes:
+
+- prior events in 60 minutes;
+- prior events in 24 hours;
+- unique destination IPs in 24 hours;
+- unique destination ports in 24 hours;
+- authentication failures in 60 minutes;
+- OT-related events in 24 hours;
+- event rate;
+- destination diversity;
+- authentication-failure rate;
+- OT-activity rate.
+
+The current event is excluded from the historical window.
+
+The exact context used at inference time is persisted with the score so an analyst can reconstruct what Sentinel knew when the event was evaluated.
 
 ## Model output
 
@@ -304,12 +332,9 @@ The Phase 7 smoke test verifies:
 
 ## Remaining Phase 7 work
 
-- derive entity-specific rolling baselines from persisted telemetry;
-- add feature windows such as event-rate and destination diversity;
 - add model lifecycle/version registry;
 - persist evaluation runs;
-- integrate behavioural evidence into Findings and Investigations;
 - add threshold/configuration controls;
 - add richer analyst pivots by entity;
 - add drift monitoring;
-- add Phase 7 final regression after the behavioural catalogue is mature.
+- mature the behavioural catalogue and add the Phase 7 final regression.

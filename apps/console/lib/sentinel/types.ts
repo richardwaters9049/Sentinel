@@ -103,6 +103,7 @@ export type InvestigationDetail = InvestigationSummary & {
   findings: Finding[];
   events: EvidenceEvent[];
   enrichments: EventEnrichment[];
+  behaviour_scores: BehaviourScore[];
   notes: InvestigationNote[];
   audit: AuditRecord[];
   timeline: TimelineEntry[];
@@ -208,6 +209,7 @@ export type FindingListResponse = {
 export type FindingDetail = Finding & {
   events: EvidenceEvent[];
   enrichments: EventEnrichment[];
+  behaviour_scores: BehaviourScore[];
   audit: AuditRecord[];
 };
 
@@ -216,6 +218,7 @@ export type FindingEvidenceContext = {
   linked_events: EvidenceEvent[];
   context_events: EvidenceEvent[];
   enrichments: EventEnrichment[];
+  behaviour_scores: BehaviourScore[];
   context_minutes: number;
 };
 
@@ -347,9 +350,24 @@ export type BehaviourExplanation = {
   message: string;
 };
 
+export type BehaviourBaselineContext = {
+  prior_events_60m: number;
+  prior_events_24h: number;
+  unique_destination_ips_24h: number;
+  unique_destination_ports_24h: number;
+  auth_failures_60m: number;
+  ot_events_24h: number;
+  event_rate_60m: number;
+  destination_diversity_24h: number;
+  auth_failure_rate_60m: number;
+  ot_activity_rate_24h: number;
+};
+
 export type BehaviourScore = {
   event_id: string;
   entity_id: string;
+  entity_type: "identity" | "asset" | "collector";
+  baseline: BehaviourBaselineContext;
   model_version: string;
   model_kind: string;
   anomaly_score: number;

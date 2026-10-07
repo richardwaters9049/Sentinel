@@ -18,6 +18,10 @@ FEATURE_NAMES = (
     "auth_failure",
     "service_account",
     "ot_activity",
+    "event_rate_60m",
+    "destination_diversity_24h",
+    "auth_failure_rate_60m",
+    "ot_activity_rate_24h",
 )
 
 
@@ -56,6 +60,10 @@ def extract_features(request: BehaviourScoreRequest) -> FeatureVector:
             1.0 if category == "authentication" and outcome == "failure" else 0.0,
             1.0 if actor_type == "service_account" else 0.0,
             1.0 if source_zone == "ot" or destination_zone == "ot" else 0.0,
+            min(request.baseline.event_rate_60m / 60.0, 1.0),
+            min(request.baseline.destination_diversity_24h, 1.0),
+            request.baseline.auth_failure_rate_60m,
+            request.baseline.ot_activity_rate_24h,
         ],
         dtype=float,
     )

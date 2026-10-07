@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -13,6 +14,7 @@ type Scorer interface {
 }
 
 type Store interface {
+	GetBehaviourBaselineContext(context.Context, string, string, time.Time) (BaselineContext, error)
 	SaveBehaviourScore(context.Context, Score) error
 }
 
@@ -30,24 +32,39 @@ func (p *Processor) Process(ctx context.Context, event telemetry.Event) error {
 		return nil
 	}
 
-	entityID := event.Source.Collector
+	entityID := strings.TrimSpace(event.Source.Collector)
+	entityType := "collector"
 	if event.Asset != nil && strings.TrimSpace(event.Asset.ID) != "" {
 		entityID = event.Asset.ID
+		entityType = "asset"
 	}
 	if event.Actor != nil && strings.TrimSpace(event.Actor.ID) != "" {
 		entityID = event.Actor.ID
+		entityType = "identity"
 	}
-	if strings.TrimSpace(entityID) == "" {
+	if entityID == "" {
 		return nil
 	}
 
+	baseline, err := p.store.GetBehaviourBaselineContext(
+		ctx,
+		entityID,
+		entityType,
+		event.Timestamp,
+	)
+	if err != nil {
+		return fmt.Errorf("load behavioural baseline for %s %s: %w", entityType, entityID, err)
+	}
+
 	request := ScoreRequest{
-		EventID:   event.EventID,
-		EntityID:  entityID,
-		Timestamp: event.Timestamp,
-		Category:  event.Event.Category,
-		Action:    event.Event.Action,
-		Outcome:   event.Event.Outcome,
+		EventID:    event.EventID,
+		EntityID:   entityID,
+		EntityType: entityType,
+		Timestamp:  event.Timestamp,
+		Category:   event.Event.Category,
+		Action:     event.Event.Action,
+		Outcome:    event.Event.Outcome,
+		Baseline:   baseline,
 	}
 	if event.Asset != nil {
 		request.SourceZone = event.Asset.Zone

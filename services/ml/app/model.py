@@ -65,6 +65,8 @@ class BehaviourModel:
         return BehaviourScoreResponse(
             event_id=request.event_id,
             entity_id=request.entity_id,
+            entity_type=request.entity_type,
+            baseline=request.baseline,
             model_version=MODEL_VERSION,
             model_kind=MODEL_KIND,
             anomaly_score=anomaly_score,
@@ -150,9 +152,17 @@ def _synthetic_baseline_rows(size: int = 720) -> np.ndarray:
         if rng.random() < 0.025:
             destination_zone = "dmz"
 
+        prior_events_60m = rng.randint(1, 14)
+        prior_events_24h = rng.randint(max(prior_events_60m, 12), 90)
+        unique_destination_ips = rng.randint(1, min(8, prior_events_24h))
+        unique_destination_ports = rng.randint(1, min(5, prior_events_24h))
+        auth_failures_60m = 1 if category == "authentication" and outcome == "failure" else 0
+        ot_events_24h = 0
+
         request = BehaviourScoreRequest(
             event_id=f"baseline-{index}",
             entity_id=f"entity-{index % 24}",
+            entity_type="identity" if index % 3 else "asset",
             timestamp=timestamp,
             category=category,
             action="baseline",
@@ -161,6 +171,18 @@ def _synthetic_baseline_rows(size: int = 720) -> np.ndarray:
             destination_zone=destination_zone,
             destination_port=port,
             actor_type=actor_type,
+            baseline={
+                "prior_events_60m": prior_events_60m,
+                "prior_events_24h": prior_events_24h,
+                "unique_destination_ips_24h": unique_destination_ips,
+                "unique_destination_ports_24h": unique_destination_ports,
+                "auth_failures_60m": auth_failures_60m,
+                "ot_events_24h": ot_events_24h,
+                "event_rate_60m": float(prior_events_60m),
+                "destination_diversity_24h": unique_destination_ips / prior_events_24h,
+                "auth_failure_rate_60m": auth_failures_60m / prior_events_60m,
+                "ot_activity_rate_24h": 0.0,
+            },
         )
         rows.append(extract_features(request).as_list())
 
@@ -175,6 +197,10 @@ def _feature_message(feature: str, observed: float, baseline: float) -> str:
         "auth_failure": "Authentication failure behaviour is uncommon in the learned baseline.",
         "service_account": "Service-account activity is less common than normal user activity.",
         "ot_activity": "OT-zone activity is uncommon relative to the enterprise baseline.",
+        "event_rate_60m": "The entity's recent event rate is unusual relative to the synthetic baseline.",
+        "destination_diversity_24h": "The entity is contacting an unusual variety of destinations.",
+        "auth_failure_rate_60m": "The entity's recent authentication-failure rate is elevated.",
+        "ot_activity_rate_24h": "The entity's recent OT activity rate differs from the normal baseline.",
         "hour_sin": "Event timing differs from the normal daily activity pattern.",
         "hour_cos": "Event timing differs from the normal daily activity pattern.",
     }

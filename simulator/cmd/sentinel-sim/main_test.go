@@ -267,3 +267,37 @@ func TestScenarioEventsIncludesBehaviouralAnalyticsFixtures(t *testing.T) {
 		t.Fatalf("expected failed authentication anomaly, got %#v", event)
 	}
 }
+
+func TestScenarioEventsIncludesRollingBehaviourProfile(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 15, 0, 0, 0, time.UTC)
+	events, err := scenarioEvents("behaviour-rolling-profile", start)
+	if err != nil {
+		t.Fatalf("rolling behaviour scenario: %v", err)
+	}
+	if len(events) != 7 {
+		t.Fatalf("expected six baseline events plus one anomaly, got %d", len(events))
+	}
+
+	for index, event := range events[:6] {
+		labels := event["labels"].(map[string]string)
+		if labels["stage"] != "baseline" {
+			t.Fatalf("event %d should be baseline, got %#v", index, labels)
+		}
+		actor := event["actor"].(map[string]interface{})
+		if actor["id"] != "user-behaviour-rolling" {
+			t.Fatalf("event %d should use rolling identity, got %#v", index, actor)
+		}
+	}
+
+	last := events[len(events)-1]
+	labels := last["labels"].(map[string]string)
+	network := last["network"].(map[string]interface{})
+	if labels["stage"] != "anomaly" {
+		t.Fatalf("final event should be anomaly, got %#v", labels)
+	}
+	if network["destination_zone"] != "ot" {
+		t.Fatalf("final event should cross into OT, got %#v", network)
+	}
+}

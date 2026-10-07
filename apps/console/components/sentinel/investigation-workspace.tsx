@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Bell,
   Binary,
+  BrainCircuit,
   ChevronRight,
   CircleDot,
   Clock3,
@@ -1087,6 +1088,71 @@ export default function InvestigationWorkspace() {
                                 {typeof match.context.classification === "string"
                                   ? match.context.classification
                                   : "unclassified"}
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    ) : null}
+
+
+                    {detail.behaviour_scores.length > 0 ? (
+                      <Card className="overflow-hidden rounded-[1.4rem] border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.06] via-[#0c1119] to-violet-400/[0.04] py-0">
+                        <CardHeader className="px-5 pb-4 pt-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <BrainCircuit className="size-4 text-cyan-300" />
+                              <div>
+                                <h3 className="text-[0.86rem] font-semibold text-cyan-100">
+                                  Behavioural context
+                                </h3>
+                                <p className="mt-1 text-[0.61rem] leading-5 text-cyan-100/45">
+                                  Model scores attached to evidence already inside this case.
+                                </p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="border-cyan-400/20 bg-cyan-400/[0.05] text-[0.56rem] text-cyan-300"
+                            >
+                              {detail.behaviour_scores.length} SCORE
+                              {detail.behaviour_scores.length === 1 ? "" : "S"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <Separator className="bg-cyan-400/10" />
+                        <CardContent className="grid gap-2 p-4 md:grid-cols-2 xl:grid-cols-3">
+                          {detail.behaviour_scores.map((score) => (
+                            <div
+                              key={score.event_id}
+                              className="rounded-xl border border-cyan-400/10 bg-slate-950/30 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <Badge
+                                  variant="outline"
+                                  className="border-cyan-400/20 bg-cyan-400/[0.05] text-[0.53rem] text-cyan-300"
+                                >
+                                  {score.entity_type.toUpperCase()}
+                                </Badge>
+                                <span
+                                  className={cn(
+                                    "text-[0.72rem] font-semibold",
+                                    score.anomaly_score >= 85
+                                      ? "text-rose-300"
+                                      : score.anomaly_score >= score.threshold
+                                        ? "text-amber-200"
+                                        : "text-emerald-300",
+                                  )}
+                                >
+                                  {score.anomaly_score}
+                                </span>
+                              </div>
+                              <div className="mt-3 truncate text-[0.64rem] font-semibold text-slate-300">
+                                {score.entity_id}
+                              </div>
+                              <div className="mt-2 text-[0.57rem] leading-5 text-slate-600">
+                                {score.baseline.prior_events_60m} events / 60m ·{" "}
+                                {Math.round(score.baseline.destination_diversity_24h * 100)}% destination diversity
                               </div>
                             </div>
                           ))}

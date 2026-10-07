@@ -124,6 +124,8 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			behaviourAnomalyEvent(start),
 		}, nil
+	case "behaviour-rolling-profile":
+		return behaviourRollingProfile(start), nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -687,6 +689,70 @@ func behaviourAnomalyEvent(timestamp time.Time) map[string]interface{} {
 			"simulated":   "true",
 		},
 	}
+}
+
+func behaviourRollingProfile(start time.Time) []map[string]interface{} {
+	events := make([]map[string]interface{}, 0, 7)
+	for i := 0; i < 6; i++ {
+		timestamp := start.Add(time.Duration(i) * 5 * time.Second)
+		events = append(events, map[string]interface{}{
+			"timestamp": timestamp.Format(time.RFC3339Nano),
+			"source": map[string]interface{}{
+				"type":      "identity",
+				"vendor":    "sentinel-sim",
+				"collector": "simulator-behaviour-rolling",
+			},
+			"asset": map[string]interface{}{
+				"id":       "asset-corporate-behaviour-rolling",
+				"hostname": "workstation-behaviour-rolling",
+				"zone":     "corporate",
+			},
+			"actor": map[string]interface{}{
+				"id":   "user-behaviour-rolling",
+				"type": "user",
+				"name": "Behaviour Rolling User",
+			},
+			"event": map[string]interface{}{
+				"category": "network",
+				"action":   "connection",
+				"outcome":  "success",
+			},
+			"network": map[string]interface{}{
+				"source_ip":        "10.10.9.20",
+				"destination_ip":   fmt.Sprintf("10.10.9.%d", 30+i%2),
+				"destination_port": 443,
+				"destination_zone": "corporate",
+				"protocol":         "tcp",
+			},
+			"labels": map[string]string{
+				"environment": "lab",
+				"scenario":    "behaviour-rolling-profile",
+				"stage":       "baseline",
+				"simulated":   "true",
+			},
+		})
+	}
+
+	anomaly := behaviourAnomalyEvent(start.Add(30 * time.Second))
+	anomaly["asset"] = map[string]interface{}{
+		"id":       "asset-corporate-behaviour-rolling",
+		"hostname": "workstation-behaviour-rolling",
+		"zone":     "corporate",
+	}
+	anomaly["actor"] = map[string]interface{}{
+		"id":   "user-behaviour-rolling",
+		"type": "user",
+		"name": "Behaviour Rolling User",
+	}
+	anomaly["labels"] = map[string]string{
+		"environment": "lab",
+		"scenario":    "behaviour-rolling-profile",
+		"stage":       "anomaly",
+		"simulated":   "true",
+	}
+	events = append(events, anomaly)
+
+	return events
 }
 
 func postEvent(

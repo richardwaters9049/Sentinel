@@ -59,3 +59,49 @@ def test_scoring_is_deterministic() -> None:
 
     assert left.anomaly_score == right.anomaly_score
     assert left.explanations == right.explanations
+
+
+def test_entity_rolling_context_affects_score_and_explanation() -> None:
+    model = BehaviourModel()
+
+    calm = model.score(
+        request_for(
+            baseline={
+                "prior_events_60m": 6,
+                "prior_events_24h": 40,
+                "unique_destination_ips_24h": 3,
+                "unique_destination_ports_24h": 2,
+                "auth_failures_60m": 0,
+                "ot_events_24h": 0,
+                "event_rate_60m": 6.0,
+                "destination_diversity_24h": 0.075,
+                "auth_failure_rate_60m": 0.0,
+                "ot_activity_rate_24h": 0.0,
+            }
+        )
+    )
+    burst = model.score(
+        request_for(
+            baseline={
+                "prior_events_60m": 60,
+                "prior_events_24h": 80,
+                "unique_destination_ips_24h": 60,
+                "unique_destination_ports_24h": 20,
+                "auth_failures_60m": 30,
+                "ot_events_24h": 30,
+                "event_rate_60m": 60.0,
+                "destination_diversity_24h": 0.75,
+                "auth_failure_rate_60m": 0.5,
+                "ot_activity_rate_24h": 0.375,
+            }
+        )
+    )
+
+    assert burst.anomaly_score > calm.anomaly_score
+    features = {item.feature for item in burst.explanations}
+    assert features & {
+        "event_rate_60m",
+        "destination_diversity_24h",
+        "auth_failure_rate_60m",
+        "ot_activity_rate_24h",
+    }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/detection"
 )
 
@@ -20,9 +21,10 @@ var (
 
 type FindingDetail struct {
 	FindingRecord
-	Events      []EventEvidenceRecord   `json:"events"`
-	Enrichments []EventEnrichmentRecord `json:"enrichments"`
-	Audit       []AuditRecord           `json:"audit"`
+	Events          []EventEvidenceRecord   `json:"events"`
+	Enrichments     []EventEnrichmentRecord `json:"enrichments"`
+	BehaviourScores []behaviour.Score       `json:"behaviour_scores"`
+	Audit           []AuditRecord           `json:"audit"`
 }
 
 type EventEvidenceRecord struct {
@@ -112,6 +114,10 @@ func (d *Database) GetFinding(ctx context.Context, id string) (FindingDetail, er
 	if err != nil {
 		return FindingDetail{}, err
 	}
+	behaviourScores, err := d.behaviourScoresForEventIDs(ctx, eventIDs)
+	if err != nil {
+		return FindingDetail{}, err
+	}
 
 	audit, err := d.auditForResource(ctx, "finding", id)
 	if err != nil {
@@ -119,10 +125,11 @@ func (d *Database) GetFinding(ctx context.Context, id string) (FindingDetail, er
 	}
 
 	return FindingDetail{
-		FindingRecord: record,
-		Events:        events,
-		Enrichments:   enrichments,
-		Audit:         audit,
+		FindingRecord:   record,
+		Events:          events,
+		Enrichments:     enrichments,
+		BehaviourScores: behaviourScores,
+		Audit:           audit,
 	}, nil
 }
 

@@ -231,8 +231,13 @@ export default function BehaviourWorkspace() {
                       <div className="truncate text-[0.7rem] font-semibold text-slate-300">
                         {score.entity_id}
                       </div>
-                      <div className="mt-1 truncate font-mono text-[0.56rem] text-slate-700">
-                        {score.event_id}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="truncate font-mono text-[0.56rem] text-slate-700">
+                          {score.event_id}
+                        </span>
+                        <span className="text-[0.5rem] font-semibold tracking-[0.08em] text-slate-700">
+                          {score.entity_type.toUpperCase()}
+                        </span>
                       </div>
                     </div>
                     <Badge
@@ -297,6 +302,84 @@ export default function BehaviourWorkspace() {
                   </div>
                 </CardContent>
               </Card>
+
+
+              {selected ? (
+                <motion.div
+                  key={selected.event_id + "-baseline"}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <Card className="overflow-hidden rounded-[1.4rem] border border-violet-400/15 bg-gradient-to-br from-violet-400/[0.06] via-[#0c1119] to-cyan-400/[0.03] py-0">
+                    <CardHeader className="px-5 pb-4 pt-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-[0.58rem] font-semibold tracking-[0.1em] text-violet-300/65">
+                            ENTITY BASELINE
+                          </div>
+                          <h2 className="mt-2 text-[0.95rem] font-semibold text-slate-100">
+                            Rolling context for {selected.entity_id}
+                          </h2>
+                          <p className="mt-1 text-[0.61rem] leading-5 text-slate-600">
+                            Historical behaviour observed before this event was scored.
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="border-violet-400/20 bg-violet-400/[0.05] text-[0.54rem] text-violet-300"
+                        >
+                          {selected.entity_type.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <Separator className="bg-violet-400/10" />
+                    <CardContent className="grid gap-2 p-4 sm:grid-cols-2">
+                      {[
+                        [
+                          selected.baseline.prior_events_60m,
+                          "events / 60m",
+                        ],
+                        [
+                          selected.baseline.prior_events_24h,
+                          "events / 24h",
+                        ],
+                        [
+                          selected.baseline.unique_destination_ips_24h,
+                          "destinations / 24h",
+                        ],
+                        [
+                          selected.baseline.auth_failures_60m,
+                          "auth failures / 60m",
+                        ],
+                        [
+                          Math.round(
+                            selected.baseline.destination_diversity_24h * 100,
+                          ) + "%",
+                          "destination diversity",
+                        ],
+                        [
+                          Math.round(
+                            selected.baseline.ot_activity_rate_24h * 100,
+                          ) + "%",
+                          "OT activity rate",
+                        ],
+                      ].map(([value, label]) => (
+                        <div
+                          key={String(label)}
+                          className="rounded-xl border border-violet-400/10 bg-slate-950/30 p-3"
+                        >
+                          <div className="text-[0.86rem] font-semibold text-violet-100">
+                            {String(value)}
+                          </div>
+                          <div className="mt-1 text-[0.52rem] font-semibold tracking-[0.08em] text-slate-700">
+                            {String(label).toUpperCase()}
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ) : null}
 
               {selected ? (
                 <motion.div

@@ -20,6 +20,8 @@ func (f *fakeScorer) Score(_ context.Context, request ScoreRequest) (Score, erro
 		f.score = Score{
 			EventID:      request.EventID,
 			EntityID:     request.EntityID,
+			EntityType:   request.EntityType,
+			Baseline:     request.Baseline,
 			ModelVersion: "test-v1",
 			ModelKind:    "IsolationForest",
 			AnomalyScore: 72,
@@ -33,8 +35,18 @@ func (f *fakeScorer) Score(_ context.Context, request ScoreRequest) (Score, erro
 }
 
 type fakeStore struct {
-	saved Score
-	err   error
+	baseline BaselineContext
+	saved    Score
+	err      error
+}
+
+func (f *fakeStore) GetBehaviourBaselineContext(
+	_ context.Context,
+	_ string,
+	_ string,
+	_ time.Time,
+) (BaselineContext, error) {
+	return f.baseline, f.err
 }
 
 func (f *fakeStore) SaveBehaviourScore(_ context.Context, score Score) error {
@@ -46,7 +58,7 @@ func TestProcessorUsesActorAsPrimaryEntityAndPersistsScore(t *testing.T) {
 	t.Parallel()
 
 	scorer := &fakeScorer{}
-	store := &fakeStore{}
+	store := &fakeStore{baseline: BaselineContext{PriorEvents60m: 7}}
 	processor := NewProcessor(scorer, store)
 
 	event := telemetry.Event{
@@ -82,6 +94,12 @@ func TestProcessorUsesActorAsPrimaryEntityAndPersistsScore(t *testing.T) {
 
 	if scorer.request.EntityID != "svc-1" {
 		t.Fatalf("expected actor entity, got %q", scorer.request.EntityID)
+	}
+	if scorer.request.EntityType != "identity" {
+		t.Fatalf("expected identity entity type, got %q", scorer.request.EntityType)
+	}
+	if scorer.request.Baseline.PriorEvents60m != 7 {
+		t.Fatalf("expected rolling baseline context to be forwarded, got %#v", scorer.request.Baseline)
 	}
 	if scorer.request.SourceZone != "corporate" {
 		t.Fatalf("unexpected source zone %q", scorer.request.SourceZone)

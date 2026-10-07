@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
 )
 
 type InvestigationDetail struct {
 	investigation.Record
-	Findings    []FindingRecord              `json:"findings"`
-	Events      []EventEvidenceRecord        `json:"events"`
-	Enrichments []EventEnrichmentRecord      `json:"enrichments"`
-	Notes       []investigation.Note         `json:"notes"`
-	Audit       []AuditRecord                `json:"audit"`
-	Timeline    []InvestigationTimelineEntry `json:"timeline"`
+	Findings        []FindingRecord              `json:"findings"`
+	Events          []EventEvidenceRecord        `json:"events"`
+	Enrichments     []EventEnrichmentRecord      `json:"enrichments"`
+	BehaviourScores []behaviour.Score            `json:"behaviour_scores"`
+	Notes           []investigation.Note         `json:"notes"`
+	Audit           []AuditRecord                `json:"audit"`
+	Timeline        []InvestigationTimelineEntry `json:"timeline"`
 }
 
 type InvestigationTimelineEntry struct {
@@ -76,6 +78,10 @@ func (d *Database) GetInvestigation(
 	if err != nil {
 		return InvestigationDetail{}, err
 	}
+	behaviourScores, err := d.behaviourScoresForEventIDs(ctx, eventIDs)
+	if err != nil {
+		return InvestigationDetail{}, err
+	}
 
 	notes, err := d.investigationNotes(ctx, id)
 	if err != nil {
@@ -87,13 +93,14 @@ func (d *Database) GetInvestigation(
 	}
 
 	return InvestigationDetail{
-		Record:      record,
-		Findings:    findings,
-		Events:      events,
-		Enrichments: enrichments,
-		Notes:       notes,
-		Audit:       audit,
-		Timeline:    buildInvestigationTimeline(findings, events, notes, audit),
+		Record:          record,
+		Findings:        findings,
+		Events:          events,
+		Enrichments:     enrichments,
+		BehaviourScores: behaviourScores,
+		Notes:           notes,
+		Audit:           audit,
+		Timeline:        buildInvestigationTimeline(findings, events, notes, audit),
 	}, nil
 }
 

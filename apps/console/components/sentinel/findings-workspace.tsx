@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Activity, AlertTriangle, Bell, Binary, CheckCircle2, ChevronRight, Clock3,
+  Activity, AlertTriangle, Bell, Binary, BrainCircuit, CheckCircle2, ChevronRight, Clock3,
   Cpu, Crosshair, FilePlus2, Fingerprint, GitBranch, Network, Radar,
   RefreshCcw, Search, ShieldAlert, Sparkles,
 } from "lucide-react";
@@ -667,6 +667,51 @@ export default function FindingsWorkspace() {
                                     <div className="mt-1 text-[0.52rem] font-semibold tracking-[0.08em] text-slate-700">
                                       EFFECTIVE
                                     </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        ) : null}
+
+                        {detail.behaviour_scores.length > 0 ? (
+                          <Card className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.06] via-[#0c1119] to-violet-400/[0.04] py-0">
+                            <CardHeader className="px-5 pb-4 pt-5">
+                              <div className="flex items-center gap-2">
+                                <BrainCircuit className="size-4 text-cyan-300" />
+                                <div>
+                                  <h3 className="text-[0.9rem] font-semibold text-cyan-100">
+                                    Behavioural evidence
+                                  </h3>
+                                  <p className="mt-1 text-[0.62rem] leading-5 text-cyan-100/45">
+                                    Baseline-deviation scores linked to this finding&apos;s evidence. These scores support analysis and are not verdicts.
+                                  </p>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <Separator className="bg-cyan-400/10" />
+                            <CardContent className="space-y-2 p-4">
+                              {detail.behaviour_scores.map((score) => (
+                                <div
+                                  key={score.event_id}
+                                  className="grid gap-3 rounded-xl border border-cyan-400/10 bg-slate-950/30 p-3 sm:grid-cols-[minmax(0,1fr)_120px] sm:items-center"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline" className="border-cyan-400/20 bg-cyan-400/[0.05] text-[0.54rem] text-cyan-300">
+                                        {score.entity_type.toUpperCase()}
+                                      </Badge>
+                                      <span className="truncate text-[0.65rem] font-semibold text-slate-300">{score.entity_id}</span>
+                                    </div>
+                                    <div className="mt-2 text-[0.58rem] leading-5 text-slate-600">
+                                      {score.model_kind} · {score.baseline.prior_events_60m} prior events / 60m
+                                    </div>
+                                  </div>
+                                  <div className="sm:text-right">
+                                    <div className={cn("text-[0.86rem] font-semibold", score.anomaly_score >= 85 ? "text-rose-300" : score.anomaly_score >= score.threshold ? "text-amber-200" : "text-emerald-300")}>
+                                      {score.anomaly_score}
+                                    </div>
+                                    <div className="mt-1 text-[0.52rem] font-semibold tracking-[0.08em] text-slate-700">ANOMALY SCORE</div>
                                   </div>
                                 </div>
                               ))}

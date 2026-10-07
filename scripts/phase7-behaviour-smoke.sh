@@ -83,6 +83,9 @@ echo "Submitting baseline-like behaviour..."
 echo "Submitting anomalous cross-zone behaviour..."
 "${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-anomaly   -delay 0s >/tmp/sentinel-phase7-anomaly.log
 
+echo "Establishing an entity-specific rolling profile..."
+"${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-rolling-profile   -delay 0s >/tmp/sentinel-phase7-rolling.log
+
 wait_for_event() {
   local scenario="$1"
   local event_id=""
@@ -102,8 +105,26 @@ wait_for_event() {
 
 NORMAL_EVENT_ID="$(wait_for_event behaviour-normal)"
 ANOMALY_EVENT_ID="$(wait_for_event behaviour-anomaly)"
+ROLLING_EVENT_ID=""
+for _ in {1..30}; do
+  ROLLING_EVENT_ID="$(
+    docker compose exec -T postgres psql -U sentinel -d sentinel -Atc \
+      "SELECT id
+       FROM events
+       WHERE labels->>'scenario'='behaviour-rolling-profile'
+         AND labels->>'stage'='anomaly'
+       ORDER BY created_at DESC
+       LIMIT 1;"
+  )"
+  [[ -n "${ROLLING_EVENT_ID}" ]] && break
+  sleep 1
+done
+[[ -n "${ROLLING_EVENT_ID}" ]] || {
+  echo "Rolling-profile anomaly event was not persisted." >&2
+  exit 1
+}
 
-for event_id in "${NORMAL_EVENT_ID}" "${ANOMALY_EVENT_ID}"; do
+for event_id in "${NORMAL_EVENT_ID}" "${ANOMALY_EVENT_ID}" "${ROLLING_EVENT_ID}"; do
   for _ in {1..30}; do
     count="$(
       docker compose exec -T postgres psql -U sentinel -d sentinel -Atc         "SELECT COUNT(*) FROM behavioural_scores WHERE event_id='${event_id}';"
@@ -119,6 +140,7 @@ done
 
 curl -fsS "${BASE}/events/${NORMAL_EVENT_ID}/behaviour"   >/tmp/sentinel-phase7-normal-score.json
 curl -fsS "${BASE}/events/${ANOMALY_EVENT_ID}/behaviour"   >/tmp/sentinel-phase7-anomaly-score.json
+curl -fsS "${BASE}/events/${ROLLING_EVENT_ID}/behaviour"   >/tmp/sentinel-phase7-rolling-score.json
 curl -fsS "${BASE}/behaviour/scores?limit=20"   >/tmp/sentinel-phase7-scores.json
 curl -fsS "${BASE}/behaviour/metrics"   >/tmp/sentinel-phase7-metrics.json
 
@@ -127,6 +149,7 @@ import json
 
 normal=json.load(open("/tmp/sentinel-phase7-normal-score.json"))
 anomaly=json.load(open("/tmp/sentinel-phase7-anomaly-score.json"))
+rolling=json.load(open("/tmp/sentinel-phase7-rolling-score.json"))
 scores=json.load(open("/tmp/sentinel-phase7-scores.json"))
 metrics=json.load(open("/tmp/sentinel-phase7-metrics.json"))
 
@@ -145,12 +168,72 @@ assert len(anomaly["explanations"]) >= 1
 features={item["feature"] for item in anomaly["explanations"]}
 assert {"cross_zone", "auth_failure", "service_account", "ot_activity"} & features
 
-assert scores["count"] >= 2
+assert rolling["event_id"] == "${ROLLING_EVENT_ID}"
+assert rolling["entity_id"] == "user-behaviour-rolling"
+assert rolling["entity_type"] == "identity"
+assert rolling["baseline"]["prior_events_60m"] >= 6, rolling
+assert rolling["baseline"]["prior_events_24h"] >= 6, rolling
+assert rolling["baseline"]["unique_destination_ips_24h"] >= 2, rolling
+assert rolling["baseline"]["destination_diversity_24h"] > 0, rolling
+assert rolling["anomalous"] is True, rolling
+
+assert scores["count"] >= 3
 assert metrics["total_scores"] >= 2
 assert metrics["anomalous_scores"] >= 1
 assert metrics["average_score"] >= 0
 PY
 
+echo "Verifying behavioural evidence propagation into findings and investigations..."
+"${SIM_BINARY}" \
+  -url "http://127.0.0.1:${GATEWAY_PORT}" \
+  -scenario intel-finding-match \
+  -delay 0s >/tmp/sentinel-phase7-finding.log
+
+FINDING_EVENT_ID="$(wait_for_event intel-finding-match)"
+for _ in {1..30}; do
+  count="$(docker compose exec -T postgres psql -U sentinel -d sentinel -Atc "SELECT COUNT(*) FROM behavioural_scores WHERE event_id='${FINDING_EVENT_ID}';")"
+  [[ "${count}" -gt 0 ]] && break
+  sleep 1
+done
+[[ "${count:-0}" -gt 0 ]] || {
+  echo "Behavioural score for finding event was not persisted." >&2
+  exit 1
+}
+
+FINDING_ID=""
+for _ in {1..30}; do
+  FINDING_ID="$(docker compose exec -T postgres psql -U sentinel -d sentinel -Atc "SELECT f.id FROM findings f JOIN finding_events fe ON fe.finding_id=f.id WHERE f.detection_id='DET-NET-001' AND fe.event_id='${FINDING_EVENT_ID}' ORDER BY f.created_at DESC LIMIT 1;")"
+  [[ -n "${FINDING_ID}" ]] && break
+  sleep 1
+done
+[[ -n "${FINDING_ID}" ]] || {
+  echo "Expected DET-NET-001 finding was not created." >&2
+  exit 1
+}
+
+curl -fsS "${BASE}/findings/${FINDING_ID}" >/tmp/sentinel-phase7-finding-detail.json
+curl -fsS "${BASE}/findings/${FINDING_ID}/evidence?context_minutes=5" >/tmp/sentinel-phase7-finding-evidence.json
+
+python3 - <<PY
+import json
+detail=json.load(open("/tmp/sentinel-phase7-finding-detail.json"))
+evidence=json.load(open("/tmp/sentinel-phase7-finding-evidence.json"))
+assert any(score["event_id"] == "${FINDING_EVENT_ID}" for score in detail["behaviour_scores"]), detail
+assert any(score["event_id"] == "${FINDING_EVENT_ID}" for score in evidence["behaviour_scores"]), evidence
+PY
+
+curl -fsS \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Sentinel-Actor: phase7-regression" \
+  --data "{\"title\":\"Phase 7 behavioural case\",\"description\":\"Verifies behavioural evidence follows telemetry into investigations.\",\"priority\":\"high\",\"owner_id\":\"phase7-regression\",\"finding_ids\":[\"${FINDING_ID}\"],\"event_ids\":[\"${FINDING_EVENT_ID}\"]}" \
+  "${BASE}/investigations" >/tmp/sentinel-phase7-investigation.json
+
+python3 - <<PY
+import json
+detail=json.load(open("/tmp/sentinel-phase7-investigation.json"))
+assert any(score["event_id"] == "${FINDING_EVENT_ID}" for score in detail["behaviour_scores"]), detail
+PY
 echo "Running Python model tests and evaluation..."
 docker compose run --rm ml python -m pytest -q
 docker compose run --rm ml python -m app.evaluation   >/tmp/sentinel-phase7-evaluation.json
@@ -169,6 +252,10 @@ echo "  Python ML service health: verified"
 echo "  deterministic Isolation Forest model: verified"
 echo "  baseline-like activity: verified"
 echo "  anomalous cross-zone behaviour: verified"
+echo "  rolling entity baselines: verified"
+echo "  baseline snapshot persistence: verified"
+echo "  finding behavioural evidence: verified"
+echo "  investigation behavioural evidence: verified"
 echo "  durable behavioural scores: verified"
 echo "  analyst-visible explanations: verified"
 echo "  score and metrics APIs: verified"
