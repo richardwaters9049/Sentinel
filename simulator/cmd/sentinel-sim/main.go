@@ -100,6 +100,22 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			otSensorTelemetryEvent(start),
 		}, nil
+	case "intel-ioc-match":
+		return []map[string]interface{}{
+			intelligenceIOCMatchEvent(start),
+		}, nil
+	case "intel-domain-match":
+		return []map[string]interface{}{
+			intelligenceDomainMatchEvent(start),
+		}, nil
+	case "intel-sha256-match":
+		return []map[string]interface{}{
+			intelligenceSHA256MatchEvent(start),
+		}, nil
+	case "intel-finding-match":
+		return []map[string]interface{}{
+			intelligenceFindingMatchEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -465,6 +481,126 @@ func otSensorTelemetryEvent(timestamp time.Time) map[string]interface{} {
 			"ot.authorized":    "true",
 			"ot.safety_impact": "none",
 			"ot.simulated":     "true",
+		},
+	}
+}
+
+func intelligenceIOCMatchEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "network",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-network-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-intel-01",
+			"hostname": "workstation-intel-01",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "network",
+			"action":   "connection",
+			"outcome":  "observed",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.0.25",
+			"destination_ip":   "198.51.100.66",
+			"destination_port": 443,
+			"destination_zone": "external",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "intel-ioc-match",
+			"simulated":   "true",
+		},
+	}
+}
+
+func intelligenceDomainMatchEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "dns",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-dns-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-intel-02",
+			"hostname": "workstation-intel-02",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "dns",
+			"action":   "query",
+			"outcome":  "observed",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "intel-domain-match",
+			"dns.query":   "telemetry-sync.example",
+			"simulated":   "true",
+		},
+	}
+}
+
+func intelligenceSHA256MatchEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "endpoint",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-endpoint-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-intel-03",
+			"hostname": "workstation-intel-03",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "file",
+			"action":   "observed",
+			"outcome":  "observed",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "intel-sha256-match",
+			"file.sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"simulated":   "true",
+		},
+	}
+}
+
+func intelligenceFindingMatchEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "network",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-network-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-intel-04",
+			"hostname": "workstation-intel-04",
+			"zone":     "corporate",
+		},
+		"event": map[string]interface{}{
+			"category": "network",
+			"action":   "connection",
+			"outcome":  "observed",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.0.25",
+			"destination_ip":   "10.30.0.40",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "intel-finding-match",
+			"simulated":   "true",
 		},
 	}
 }

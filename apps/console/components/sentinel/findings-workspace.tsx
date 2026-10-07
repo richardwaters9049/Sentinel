@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Activity, AlertTriangle, Bell, CheckCircle2, ChevronRight, Clock3,
+  Activity, AlertTriangle, Bell, Binary, CheckCircle2, ChevronRight, Clock3,
   Cpu, Crosshair, FilePlus2, Fingerprint, GitBranch, Network, Radar,
   RefreshCcw, Search, ShieldAlert, Sparkles,
 } from "lucide-react";
@@ -617,6 +617,62 @@ export default function FindingsWorkspace() {
                             ))}
                           </CardContent>
                         </Card>
+
+                        {detail.enrichments.length > 0 ? (
+                          <Card className="overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-400/[0.06] via-[#0c1119] to-cyan-400/[0.04] py-0">
+                            <CardHeader className="px-5 pb-4 pt-5">
+                              <div className="flex items-center gap-2">
+                                <Binary className="size-4 text-violet-300" />
+                                <div>
+                                  <h3 className="text-[0.9rem] font-semibold text-violet-100">
+                                    Threat-intelligence enrichment
+                                  </h3>
+                                  <p className="mt-1 text-[0.62rem] leading-5 text-violet-100/45">
+                                    IOC matches linked to this finding&apos;s evidence.
+                                    Confidence remains source-aware rather than binary.
+                                  </p>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <Separator className="bg-violet-400/10" />
+                            <CardContent className="space-y-2 p-4">
+                              {detail.enrichments.map((match) => (
+                                <div
+                                  key={match.id}
+                                  className="grid gap-3 rounded-xl border border-violet-400/10 bg-slate-950/30 p-3 sm:grid-cols-[minmax(0,1fr)_120px] sm:items-center"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge
+                                        variant="outline"
+                                        className="border-violet-400/20 bg-violet-400/[0.05] text-[0.54rem] text-violet-300"
+                                      >
+                                        {match.indicator_type.toUpperCase()}
+                                      </Badge>
+                                      <span className="truncate font-mono text-[0.65rem] font-semibold text-slate-300">
+                                        {match.observed_value}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 text-[0.58rem] leading-5 text-slate-600">
+                                      {match.source_name} · {match.event_field} ·{" "}
+                                      {typeof match.context.classification === "string"
+                                        ? match.context.classification
+                                        : "unclassified"}
+                                    </div>
+                                  </div>
+                                  <div className="sm:text-right">
+                                    <div className="text-[0.86rem] font-semibold text-cyan-300">
+                                      {match.effective_confidence}%
+                                    </div>
+                                    <div className="mt-1 text-[0.52rem] font-semibold tracking-[0.08em] text-slate-700">
+                                      EFFECTIVE
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        ) : null}
 
                         <Card className="surface-card rounded-2xl border-slate-800/85 bg-transparent py-0">
                           <CardHeader className="px-5 pb-4 pt-5">

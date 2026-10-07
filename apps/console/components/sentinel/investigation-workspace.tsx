@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BadgeCheck,
   Bell,
+  Binary,
   ChevronRight,
   CircleDot,
   Clock3,
@@ -1034,6 +1035,64 @@ export default function InvestigationWorkspace() {
                         </CardContent>
                       </Card>
                     </motion.section>
+
+
+                    {detail.enrichments.length > 0 ? (
+                      <Card className="overflow-hidden rounded-[1.4rem] border border-violet-400/20 bg-gradient-to-br from-violet-400/[0.06] via-[#0c1119] to-cyan-400/[0.04] py-0">
+                        <CardHeader className="px-5 pb-4 pt-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <Binary className="size-4 text-violet-300" />
+                              <div>
+                                <h3 className="text-[0.86rem] font-semibold text-violet-100">
+                                  Intelligence context
+                                </h3>
+                                <p className="mt-1 text-[0.61rem] leading-5 text-violet-100/45">
+                                  IOC matches attached to evidence already inside this case.
+                                </p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="border-violet-400/20 bg-violet-400/[0.05] text-[0.56rem] text-violet-300"
+                            >
+                              {detail.enrichments.length} MATCH
+                              {detail.enrichments.length === 1 ? "" : "ES"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <Separator className="bg-violet-400/10" />
+                        <CardContent className="grid gap-2 p-4 md:grid-cols-2 xl:grid-cols-3">
+                          {detail.enrichments.map((match) => (
+                            <div
+                              key={match.id}
+                              className="rounded-xl border border-violet-400/10 bg-slate-950/30 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <Badge
+                                  variant="outline"
+                                  className="border-violet-400/20 bg-violet-400/[0.05] text-[0.53rem] text-violet-300"
+                                >
+                                  {match.indicator_type.toUpperCase()}
+                                </Badge>
+                                <span className="text-[0.72rem] font-semibold text-cyan-300">
+                                  {match.effective_confidence}%
+                                </span>
+                              </div>
+                              <div className="mt-3 break-all font-mono text-[0.64rem] font-semibold text-slate-300">
+                                {match.observed_value}
+                              </div>
+                              <div className="mt-2 text-[0.57rem] leading-5 text-slate-600">
+                                {match.source_name} ·{" "}
+                                {typeof match.context.classification === "string"
+                                  ? match.context.classification
+                                  : "unclassified"}
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    ) : null}
 
                     <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_330px]">
                       <section className="overflow-hidden rounded-[1.4rem] border border-slate-800/85 bg-[#080d14]/92">

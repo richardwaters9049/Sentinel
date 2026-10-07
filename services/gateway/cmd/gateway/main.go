@@ -12,6 +12,7 @@ import (
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/config"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/detection"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/httpserver"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/messaging"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
@@ -55,7 +56,12 @@ func main() {
 
 	telemetryService := telemetry.NewService(natsClient)
 	detectionEngine := detection.New(db)
-	persistenceHandler := telemetry.PersistenceHandler(db, detectionEngine)
+	enrichmentEngine := enrichment.New(db)
+	processorChain := telemetry.ProcessorChain{
+		detectionEngine,
+		enrichmentEngine,
+	}
+	persistenceHandler := telemetry.PersistenceHandler(db, processorChain)
 
 	subscription, err := natsClient.StartTelemetryConsumer(
 		ctx,

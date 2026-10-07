@@ -20,8 +20,9 @@ var (
 
 type FindingDetail struct {
 	FindingRecord
-	Events []EventEvidenceRecord `json:"events"`
-	Audit  []AuditRecord         `json:"audit"`
+	Events      []EventEvidenceRecord   `json:"events"`
+	Enrichments []EventEnrichmentRecord `json:"enrichments"`
+	Audit       []AuditRecord           `json:"audit"`
 }
 
 type EventEvidenceRecord struct {
@@ -103,6 +104,15 @@ func (d *Database) GetFinding(ctx context.Context, id string) (FindingDetail, er
 	if err != nil {
 		return FindingDetail{}, err
 	}
+	eventIDs := make([]string, 0, len(events))
+	for _, event := range events {
+		eventIDs = append(eventIDs, event.ID)
+	}
+	enrichments, err := d.eventEnrichmentsForEventIDs(ctx, eventIDs)
+	if err != nil {
+		return FindingDetail{}, err
+	}
+
 	audit, err := d.auditForResource(ctx, "finding", id)
 	if err != nil {
 		return FindingDetail{}, err
@@ -111,6 +121,7 @@ func (d *Database) GetFinding(ctx context.Context, id string) (FindingDetail, er
 	return FindingDetail{
 		FindingRecord: record,
 		Events:        events,
+		Enrichments:   enrichments,
 		Audit:         audit,
 	}, nil
 }

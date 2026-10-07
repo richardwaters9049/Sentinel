@@ -102,6 +102,7 @@ export type TimelineEntry = {
 export type InvestigationDetail = InvestigationSummary & {
   findings: Finding[];
   events: EvidenceEvent[];
+  enrichments: EventEnrichment[];
   notes: InvestigationNote[];
   audit: AuditRecord[];
   timeline: TimelineEntry[];
@@ -206,6 +207,7 @@ export type FindingListResponse = {
 
 export type FindingDetail = Finding & {
   events: EvidenceEvent[];
+  enrichments: EventEnrichment[];
   audit: AuditRecord[];
 };
 
@@ -213,6 +215,7 @@ export type FindingEvidenceContext = {
   finding_id: string;
   linked_events: EvidenceEvent[];
   context_events: EvidenceEvent[];
+  enrichments: EventEnrichment[];
   context_minutes: number;
 };
 
@@ -259,4 +262,78 @@ export type DetectionMetric = {
 export type DetectionMetricsResponse = {
   count: number;
   metrics: DetectionMetric[];
+};
+
+
+export type IntelligenceIndicator = {
+  id: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  indicator_type: "ip" | "domain" | "sha256";
+  value: string;
+  normalized_value: string;
+  source_confidence: number;
+  confidence: number;
+  valid_from: string;
+  valid_until?: string;
+  tags: string[];
+  context: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+};
+
+export type IntelligenceIndicatorListResponse = {
+  count: number;
+  indicators: IntelligenceIndicator[];
+};
+
+export type EventEnrichment = {
+  id: number;
+  event_id: string;
+  indicator_id: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  indicator_type: string;
+  indicator_value: string;
+  event_field: string;
+  observed_value: string;
+  source_confidence: number;
+  indicator_confidence: number;
+  effective_confidence: number;
+  tags: string[];
+  context: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  matched_at: string;
+};
+
+export type IntelligenceMatchListResponse = {
+  count: number;
+  matches: EventEnrichment[];
+};
+
+export type IntelligenceMetrics = {
+  active_sources: number;
+  active_indicators: number;
+  enriched_events: number;
+  total_matches: number;
+  high_confidence_hits: number;
+};
+
+
+export type IntelligenceSource = {
+  id: string;
+  name: string;
+  source_type: string;
+  description: string;
+  default_confidence: number;
+  provenance: Record<string, unknown>;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IntelligenceSourceListResponse = {
+  count: number;
+  sources: IntelligenceSource[];
 };

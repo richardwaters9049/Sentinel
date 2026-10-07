@@ -132,3 +132,52 @@ func marshalEvent(t *testing.T, event Event) []byte {
 	}
 	return payload
 }
+
+type processorRecorder struct {
+	name  string
+	order *[]string
+	err   error
+}
+
+func (p processorRecorder) Process(_ context.Context, _ Event) error {
+	*p.order = append(*p.order, p.name)
+	return p.err
+}
+
+func TestProcessorChainRunsInOrder(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	chain := ProcessorChain{
+		processorRecorder{name: "detection", order: &order},
+		processorRecorder{name: "enrichment", order: &order},
+	}
+
+	if err := chain.Process(context.Background(), Event{EventID: "evt-chain"}); err != nil {
+		t.Fatalf("process chain: %v", err)
+	}
+
+	if got, want := len(order), 2; got != want {
+		t.Fatalf("expected %d processors, got %d", want, got)
+	}
+	if order[0] != "detection" || order[1] != "enrichment" {
+		t.Fatalf("unexpected processor order: %#v", order)
+	}
+}
+
+func TestProcessorChainStopsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	chain := ProcessorChain{
+		processorRecorder{name: "detection", order: &order, err: errors.New("boom")},
+		processorRecorder{name: "enrichment", order: &order},
+	}
+
+	if err := chain.Process(context.Background(), Event{EventID: "evt-chain-error"}); err == nil {
+		t.Fatal("expected processor failure")
+	}
+	if len(order) != 1 || order[0] != "detection" {
+		t.Fatalf("expected chain to stop after failure, got %#v", order)
+	}
+}
