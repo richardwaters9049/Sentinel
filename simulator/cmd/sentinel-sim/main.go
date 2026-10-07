@@ -116,6 +116,14 @@ func scenarioEvents(name string, start time.Time) ([]map[string]interface{}, err
 		return []map[string]interface{}{
 			intelligenceFindingMatchEvent(start),
 		}, nil
+	case "behaviour-normal":
+		return []map[string]interface{}{
+			behaviourNormalEvent(start),
+		}, nil
+	case "behaviour-anomaly":
+		return []map[string]interface{}{
+			behaviourAnomalyEvent(start),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown scenario %q", name)
 	}
@@ -600,6 +608,82 @@ func intelligenceFindingMatchEvent(timestamp time.Time) map[string]interface{} {
 		"labels": map[string]string{
 			"environment": "lab",
 			"scenario":    "intel-finding-match",
+			"simulated":   "true",
+		},
+	}
+}
+
+func behaviourNormalEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "endpoint",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-behaviour-01",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-behaviour-01",
+			"hostname": "workstation-behaviour-01",
+			"zone":     "corporate",
+		},
+		"actor": map[string]interface{}{
+			"id":   "user-behaviour-normal",
+			"type": "user",
+			"name": "Behaviour Baseline User",
+		},
+		"event": map[string]interface{}{
+			"category": "network",
+			"action":   "connection",
+			"outcome":  "success",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.5.20",
+			"destination_ip":   "10.10.5.30",
+			"destination_port": 443,
+			"destination_zone": "corporate",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "behaviour-normal",
+			"simulated":   "true",
+		},
+	}
+}
+
+func behaviourAnomalyEvent(timestamp time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+		"source": map[string]interface{}{
+			"type":      "identity",
+			"vendor":    "sentinel-sim",
+			"collector": "simulator-behaviour-02",
+		},
+		"asset": map[string]interface{}{
+			"id":       "asset-corporate-behaviour-02",
+			"hostname": "jump-behaviour-02",
+			"zone":     "corporate",
+		},
+		"actor": map[string]interface{}{
+			"id":   "svc-behaviour-anomaly",
+			"type": "service_account",
+			"name": "Behaviour Anomaly Service",
+		},
+		"event": map[string]interface{}{
+			"category": "authentication",
+			"action":   "login",
+			"outcome":  "failure",
+		},
+		"network": map[string]interface{}{
+			"source_ip":        "10.10.8.40",
+			"destination_ip":   "10.30.0.40",
+			"destination_port": 502,
+			"destination_zone": "ot",
+			"protocol":         "tcp",
+		},
+		"labels": map[string]string{
+			"environment": "lab",
+			"scenario":    "behaviour-anomaly",
 			"simulated":   "true",
 		},
 	}

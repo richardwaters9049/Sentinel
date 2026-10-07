@@ -11,6 +11,8 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("SENTINEL_LOG_LEVEL", "")
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("NATS_URL", "")
+	t.Setenv("SENTINEL_ML_URL", "")
+	t.Setenv("SENTINEL_BEHAVIOUR_ENABLED", "")
 	t.Setenv("SENTINEL_DEPENDENCY_TIMEOUT", "")
 	t.Setenv("SENTINEL_SHUTDOWN_TIMEOUT", "")
 	t.Setenv("SENTINEL_READ_HEADER_TIMEOUT", "")
@@ -55,5 +57,21 @@ func TestLoadRejectsInvalidDuration(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected invalid duration to be rejected")
+	}
+}
+
+func TestLoadBehaviourAnalyticsOptIn(t *testing.T) {
+	t.Setenv("SENTINEL_BEHAVIOUR_ENABLED", "true")
+	t.Setenv("SENTINEL_ML_URL", "http://127.0.0.1:8090")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected behaviour config to load: %v", err)
+	}
+	if !cfg.BehaviourEnabled {
+		t.Fatal("expected behavioural analytics to be enabled")
+	}
+	if cfg.MLURL != "http://127.0.0.1:8090" {
+		t.Fatalf("unexpected ML URL %q", cfg.MLURL)
 	}
 }

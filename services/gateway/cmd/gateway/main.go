@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/config"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/detection"
@@ -61,6 +62,20 @@ func main() {
 		detectionEngine,
 		enrichmentEngine,
 	}
+
+	var behaviourClient *behaviour.Client
+	if cfg.BehaviourEnabled {
+		behaviourClient = behaviour.NewClient(cfg.MLURL, cfg.DependencyTimeout)
+		processorChain = append(
+			processorChain,
+			behaviour.NewProcessor(behaviourClient, db),
+		)
+		logger.Info(
+			"behavioural analytics enabled",
+			"ml_url", cfg.MLURL,
+		)
+	}
+
 	persistenceHandler := telemetry.PersistenceHandler(db, processorChain)
 
 	subscription, err := natsClient.StartTelemetryConsumer(
@@ -80,10 +95,14 @@ func main() {
 		}
 	}()
 
-	readinessChecker := readiness.New(cfg.DependencyTimeout, map[string]readiness.CheckFunc{
+	readinessChecks := map[string]readiness.CheckFunc{
 		"postgres": db.Ping,
 		"nats":     natsClient.Ping,
-	})
+	}
+	if behaviourClient != nil {
+		readinessChecks["ml"] = behaviourClient.Ping
+	}
+	readinessChecker := readiness.New(cfg.DependencyTimeout, readinessChecks)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

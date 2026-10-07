@@ -14,6 +14,7 @@ const (
 	defaultLogLevel          = "info"
 	defaultDatabaseURL       = "postgres://sentinel:sentinel_dev_only@127.0.0.1:55432/sentinel?sslmode=disable"
 	defaultNATSURL           = "nats://127.0.0.1:4222"
+	defaultMLURL             = "http://127.0.0.1:8090"
 	defaultDependencyWait    = 10 * time.Second
 	defaultShutdownTimeout   = 10 * time.Second
 	defaultReadHeaderTimeout = 5 * time.Second
@@ -25,6 +26,8 @@ type Config struct {
 	LogLevel          string
 	DatabaseURL       string
 	NATSURL           string
+	MLURL             string
+	BehaviourEnabled  bool
 	DependencyTimeout time.Duration
 	ShutdownTimeout   time.Duration
 	ReadHeaderTimeout time.Duration
@@ -37,6 +40,8 @@ func Load() (Config, error) {
 		LogLevel:          strings.ToLower(getEnv("SENTINEL_LOG_LEVEL", defaultLogLevel)),
 		DatabaseURL:       getEnv("DATABASE_URL", defaultDatabaseURL),
 		NATSURL:           getEnv("NATS_URL", defaultNATSURL),
+		MLURL:             getEnv("SENTINEL_ML_URL", defaultMLURL),
+		BehaviourEnabled:  getBoolEnv("SENTINEL_BEHAVIOUR_ENABLED", false),
 		DependencyTimeout: getDurationEnv("SENTINEL_DEPENDENCY_TIMEOUT", defaultDependencyWait),
 		ShutdownTimeout:   getDurationEnv("SENTINEL_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
 		ReadHeaderTimeout: getDurationEnv("SENTINEL_READ_HEADER_TIMEOUT", defaultReadHeaderTimeout),
@@ -58,6 +63,10 @@ func Load() (Config, error) {
 
 	if strings.TrimSpace(cfg.NATSURL) == "" {
 		return Config{}, fmt.Errorf("NATS_URL must not be empty")
+	}
+
+	if cfg.BehaviourEnabled && strings.TrimSpace(cfg.MLURL) == "" {
+		return Config{}, fmt.Errorf("SENTINEL_ML_URL must not be empty when behavioural analytics are enabled")
 	}
 
 	if cfg.DependencyTimeout <= 0 {
@@ -99,4 +108,17 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 	}
 
 	return -1
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

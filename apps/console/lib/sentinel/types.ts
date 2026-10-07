@@ -337,3 +337,38 @@ export type IntelligenceSourceListResponse = {
   count: number;
   sources: IntelligenceSource[];
 };
+
+
+export type BehaviourExplanation = {
+  feature: string;
+  observed: number;
+  baseline: number;
+  deviation: number;
+  message: string;
+};
+
+export type BehaviourScore = {
+  event_id: string;
+  entity_id: string;
+  model_version: string;
+  model_kind: string;
+  anomaly_score: number;
+  severity: "low" | "medium" | "high";
+  anomalous: boolean;
+  threshold: number;
+  explanations: BehaviourExplanation[];
+  scored_at: string;
+};
+
+export type BehaviourScoreListResponse = {
+  count: number;
+  scores: BehaviourScore[];
+};
+
+export type BehaviourMetrics = {
+  total_scores: number;
+  anomalous_scores: number;
+  high_severity_scores: number;
+  average_score: number;
+  last_scored_at?: string;
+};

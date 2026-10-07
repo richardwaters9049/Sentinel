@@ -19,6 +19,8 @@ import type {
   IntelligenceMetrics,
   IntelligenceSource,
   IntelligenceSourceListResponse,
+  BehaviourMetrics,
+  BehaviourScoreListResponse,
 } from "@/lib/sentinel/types";
 
 type APIErrorPayload = {
@@ -407,4 +409,29 @@ export async function addInvestigationNote(
     },
   );
   return readJSON<InvestigationDetail>(response);
+}
+
+
+export async function getBehaviourMetrics(
+  signal?: AbortSignal,
+): Promise<BehaviourMetrics> {
+  const response = await fetch("/api/sentinel/api/v1/behaviour/metrics", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<BehaviourMetrics>(response);
+}
+
+export async function listBehaviourScores(
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<BehaviourScoreListResponse> {
+  const response = await fetch(
+    `/api/sentinel/api/v1/behaviour/scores?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJSON<BehaviourScoreListResponse>(response);
 }

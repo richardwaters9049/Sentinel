@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
@@ -26,6 +27,12 @@ type TelemetryIngestor interface {
 
 type EventReader interface {
 	ListEvents(context.Context, database.EventQuery) ([]telemetry.Event, error)
+}
+
+type BehaviourStore interface {
+	GetEventBehaviourScore(context.Context, string) (behaviour.Score, error)
+	ListBehaviourScores(context.Context, int) ([]behaviour.Score, error)
+	BehaviourMetrics(context.Context) (database.BehaviourMetrics, error)
 }
 
 type IntelligenceStore interface {
@@ -112,6 +119,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches)
 	s.mux.HandleFunc("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics)
 	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
+	s.mux.HandleFunc("GET /api/v1/behaviour/scores", s.handleBehaviourScores)
+	s.mux.HandleFunc("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics)
+	s.mux.HandleFunc("GET /api/v1/events/{id}/behaviour", s.handleEventBehaviour)
 	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
 	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
 	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
@@ -228,6 +238,71 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		"count":  len(events),
 		"events": events,
 	})
+}
+
+func (s *Server) handleBehaviourScores(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	limit := 50
+	if value := strings.TrimSpace(r.URL.Query().Get("limit")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 200 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 200")
+			return
+		}
+		limit = parsed
+	}
+
+	scores, err := store.ListBehaviourScores(r.Context(), limit)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behavioural scores could not be queried")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":  len(scores),
+		"scores": scores,
+	})
+}
+
+func (s *Server) handleBehaviourMetrics(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	metrics, err := store.BehaviourMetrics(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behavioural metrics could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (s *Server) handleEventBehaviour(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	eventID := strings.TrimSpace(r.PathValue("id"))
+	if eventID == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_event_id", "event id is required")
+		return
+	}
+
+	score, err := store.GetEventBehaviourScore(r.Context(), eventID)
+	if err != nil {
+		writeAPIError(w, http.StatusNotFound, "behaviour_score_not_found", "behavioural score was not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, score)
 }
 
 func (s *Server) handleIntelligenceIndicators(w http.ResponseWriter, r *http.Request) {

@@ -229,3 +229,41 @@ func TestScenarioEventsIncludesFindingEnrichmentMatch(t *testing.T) {
 		t.Fatalf("expected corporate source asset, got %#v", events[0]["asset"])
 	}
 }
+
+func TestScenarioEventsIncludesBehaviouralAnalyticsFixtures(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 10, 7, 15, 0, 0, 0, time.UTC)
+
+	normal, err := scenarioEvents("behaviour-normal", start)
+	if err != nil {
+		t.Fatalf("normal behaviour scenario: %v", err)
+	}
+	if len(normal) != 1 {
+		t.Fatalf("expected one normal behaviour event, got %d", len(normal))
+	}
+	normalNetwork := normal[0]["network"].(map[string]interface{})
+	if normalNetwork["destination_zone"] != "corporate" {
+		t.Fatalf("unexpected normal destination zone: %#v", normalNetwork)
+	}
+
+	anomaly, err := scenarioEvents("behaviour-anomaly", start)
+	if err != nil {
+		t.Fatalf("anomaly behaviour scenario: %v", err)
+	}
+	if len(anomaly) != 1 {
+		t.Fatalf("expected one anomaly behaviour event, got %d", len(anomaly))
+	}
+	actor := anomaly[0]["actor"].(map[string]interface{})
+	network := anomaly[0]["network"].(map[string]interface{})
+	event := anomaly[0]["event"].(map[string]interface{})
+	if actor["type"] != "service_account" {
+		t.Fatalf("expected service account anomaly fixture, got %#v", actor)
+	}
+	if network["destination_zone"] != "ot" || network["destination_port"] != 502 {
+		t.Fatalf("unexpected anomaly network context: %#v", network)
+	}
+	if event["outcome"] != "failure" {
+		t.Fatalf("expected failed authentication anomaly, got %#v", event)
+	}
+}
