@@ -3,6 +3,8 @@
 import argparse
 from datetime import datetime
 import json
+import errno
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import quote
 from urllib.error import URLError
 from urllib.request import urlopen
 import webbrowser
@@ -31,6 +34,7 @@ class Launcher:
         self.run_dir = None
         self.console_url = f"http://127.0.0.1:{args.console_port}"
         self.gateway_url = f"http://127.0.0.1:{args.gateway_port}"
+        self.compose_command = ["docker", "compose"]
 
     def run_command(self, command, *, cwd=ROOT, env=None, log_name="startup"):
         child = self.spawn(command, env, log_name, cwd=cwd)
@@ -88,6 +92,83 @@ class Launcher:
         for log in self.log_handles:
             log.close()
 
+    def select_app_ports(self):
+        self.args.console_port = find_available_port(self.args.console_port)
+        self.args.gateway_port = find_available_port(self.args.gateway_port,
+                                                     exclude={self.args.console_port})
+        self.console_url = f"http://127.0.0.1:{self.args.console_port}"
+        self.gateway_url = f"http://127.0.0.1:{self.args.gateway_port}"
+
+    def docker_json(self, command):
+        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+        if result.returncode:
+            raise StartupError(f"Docker command failed ({command[1]}). Check Docker Desktop.")
+        return json.loads(result.stdout)
+
+    def start_infrastructure(self):
+        # Locate this checkout's existing project, preserving its database and ports.
+        ids = subprocess.run(["docker", "ps", "-aq", "--filter",
+                              f"label=com.docker.compose.project.working_dir={ROOT}"],
+                             capture_output=True, text=True, check=True).stdout.split()
+        containers = self.docker_json(["docker", "inspect", *ids]) if ids else []
+        projects = {c["Config"]["Labels"]["com.docker.compose.project"] for c in containers}
+        if len(projects) > 1:
+            raise StartupError("Multiple Docker projects belong to this checkout; stop the extra project first.")
+        project = next(iter(projects), "sentinel-" + hashlib.sha256(str(ROOT).encode()).hexdigest()[:12])
+        config = self.docker_json(["docker", "compose", "-p", project, "config", "--format", "json"])
+        running = {c["Config"]["Labels"]["com.docker.compose.service"]: c
+                   for c in containers if c["State"]["Running"]}
+        missing = []
+        for name, service in config["services"].items():
+            service.pop("container_name", None)
+            if name not in running:
+                missing.append(name)
+            # Docker allocates unused host ports atomically for new/stopped services.
+            for port in service.get("ports", []):
+                port["host_ip"] = "127.0.0.1"
+                port["published"] = "0"
+        compose_file = self.run_dir / "compose.json"
+        # Resolved environment values may contain dollars; prevent re-interpolation.
+        def escape(value):
+            if isinstance(value, str):
+                return value.replace("$", "$$")
+            if isinstance(value, list):
+                return [escape(item) for item in value]
+            if isinstance(value, dict):
+                return {key: escape(item) for key, item in value.items()}
+            return value
+        compose_file.write_text(json.dumps(escape(config)))
+        self.compose_command = ["docker", "compose", "-p", project, "--project-directory",
+                                str(ROOT), "-f", str(compose_file)]
+        if missing:
+            self.run_command(self.compose_command + ["up", "-d", "--build", "--no-deps", *missing],
+                             log_name="infrastructure")
+        ids = subprocess.run(self.compose_command + ["ps", "-q"], capture_output=True,
+                             text=True, check=True).stdout.split()
+        if not ids:
+            raise StartupError("Docker dependencies did not start.")
+        containers = self.docker_json(["docker", "inspect", *ids])
+        services = {c["Config"]["Labels"]["com.docker.compose.service"]: c for c in containers}
+        def host_port(service, target):
+            bindings = services[service]["NetworkSettings"]["Ports"].get(f"{target}/tcp") or []
+            if not bindings:
+                raise StartupError(f"No published port for {service}.")
+            return int(bindings[0]["HostPort"])
+        database_port = host_port("postgres", 5432)
+        nats_port = host_port("nats", 4222)
+        monitor_port = host_port("nats", 8222)
+        ml_port = host_port("ml", 8090)
+        pg = config["services"]["postgres"]["environment"]
+        user = quote(pg["POSTGRES_USER"], safe="")
+        password = quote(pg["POSTGRES_PASSWORD"], safe="")
+        database = quote(pg["POSTGRES_DB"], safe="")
+        print(f"Docker project: {project}; PostgreSQL: {database_port}; "
+              f"NATS: {nats_port} (monitor {monitor_port}); ML: {ml_port}", flush=True)
+        return {"DATABASE_URL": f"postgres://{user}:{password}@127.0.0.1:{database_port}/{database}?sslmode=disable",
+                "NATS_URL": f"nats://127.0.0.1:{nats_port}",
+                "NATS_MONITOR_URL": f"http://127.0.0.1:{monitor_port}",
+                "SENTINEL_ML_URL": f"http://127.0.0.1:{ml_port}"}
+
     def start(self):
         for command in ("docker", "go", "bun"):
             if not shutil.which(command):
@@ -95,12 +176,9 @@ class Launcher:
         result = subprocess.run(["docker", "compose", "version"], capture_output=True)
         if result.returncode:
             raise StartupError("Docker Compose is unavailable. Install/start Docker Desktop.")
-        for port in (self.args.console_port, self.args.gateway_port):
-            require_free_port(port)
-        if self.args.console_port == self.args.gateway_port:
-            raise StartupError("Console and gateway ports must be different.")
         if self.args.check:
-            print("Prerequisites found; console and gateway ports are available.")
+            self.select_app_ports()
+            print(f"Prerequisites found. Console: {self.console_url}; gateway: {self.gateway_url}")
             return
 
         os.umask(0o077)
@@ -118,20 +196,23 @@ class Launcher:
             self.wait_for("Docker Desktop", docker_ready)
 
         print("Starting PostgreSQL, NATS and behavioural analytics…", flush=True)
-        self.run_command(["docker", "compose", "up", "-d", "--build"], log_name="infrastructure")
-        self.wait_for("PostgreSQL", postgres_ready)
-        self.wait_for("NATS", lambda: http_ready("http://127.0.0.1:8222/healthz"))
-        self.wait_for("ML service", lambda: http_ready("http://127.0.0.1:8090/health"))
+        dependency_env = self.start_infrastructure()
+        self.wait_for("PostgreSQL", lambda: postgres_ready(self.compose_command))
+        self.wait_for("NATS", lambda: http_ready(dependency_env["NATS_MONITOR_URL"] + "/healthz"))
+        self.wait_for("ML service", lambda: http_ready(dependency_env["SENTINEL_ML_URL"] + "/health"))
 
         print("Checking frontend dependencies and building the gateway…", flush=True)
         self.run_command(["bun", "install", "--frozen-lockfile"], cwd=ROOT / "apps" / "console")
         binary = self.run_dir / "sentinel-gateway"
         self.run_command(["go", "build", "-o", str(binary), "./cmd/gateway"], cwd=ROOT / "services" / "gateway")
 
+        self.select_app_ports()
+        print(f"Console: {self.console_url}; gateway: {self.gateway_url}", flush=True)
         result = subprocess.run([sys.executable, str(ROOT / "scripts" / "provision-lab-console-auth.py")],
                                 cwd=ROOT, capture_output=True, text=True, check=True)
         credentials = json.loads(result.stdout)
         env = os.environ.copy()
+        env.update(dependency_env)
         env.update(SENTINEL_AUTH_MODE="required", SENTINEL_CONSOLE_AUTH_MODE="required",
                    SENTINEL_AUTH_CREDENTIALS_FILE=credentials["manifest_path"],
                    SENTINEL_CONSOLE_ORIGIN=self.console_url,
@@ -163,12 +244,23 @@ class Launcher:
             time.sleep(1)
 
 
-def require_free_port(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError as error:
-            raise StartupError(f"Port {port} is already in use. Stop its existing service before starting Sentinel.") from error
+def find_available_port(preferred, exclude=()):
+    # Try nearby ports, then ask the OS for an ephemeral port.
+    candidates = list(range(preferred, min(preferred + 100, 65536))) + [0] * 10
+    for candidate in candidates:
+        if candidate in exclude:
+            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", candidate))
+            except OSError as error:
+                if error.errno in (errno.EADDRINUSE, errno.EACCES):
+                    continue
+                raise
+            chosen = sock.getsockname()[1]
+            if chosen not in exclude:
+                return chosen
+    raise StartupError("Could not find an available local port.")
 
 
 def docker_ready():
@@ -179,9 +271,9 @@ def docker_ready():
         return False
 
 
-def postgres_ready():
+def postgres_ready(compose_command=None):
     try:
-        return subprocess.run(["docker", "compose", "exec", "-T", "postgres", "sh", "-c",
+        return subprocess.run((compose_command or ["docker", "compose"]) + ["exec", "-T", "postgres", "sh", "-c",
                                'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
                               cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                               timeout=10).returncode == 0
@@ -209,8 +301,8 @@ def main():
     parser.add_argument("--no-browser", action="store_true", help="do not open the browser")
     parser.add_argument("--copy-token", action="store_true", help="copy the analyst credential to the macOS clipboard")
     parser.add_argument("--check", action="store_true", help="check prerequisites and ports without starting services")
-    parser.add_argument("--console-port", type=port_number, default=3000)
-    parser.add_argument("--gateway-port", type=port_number, default=8080)
+    parser.add_argument("--console-port", type=port_number, default=3000, help="preferred console port; automatically skips busy ports")
+    parser.add_argument("--gateway-port", type=port_number, default=8080, help="preferred gateway port; automatically skips busy ports")
     launcher = Launcher(parser.parse_args())
     def stop(_signum, _frame):
         raise KeyboardInterrupt

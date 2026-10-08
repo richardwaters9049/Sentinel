@@ -1,7 +1,7 @@
 # Local development
 
-Sentinel is a local synthetic lab. Use the canonical console origin
-`http://127.0.0.1:3000`; `localhost` is a different origin for sign-in checks.
+Sentinel is a local synthetic lab. Use the exact console origin printed by the launcher
+(or `http://127.0.0.1:3000` for manual startup); `localhost` is a different origin for sign-in checks.
 The gateway and console bind to loopback by default. Compose publishes database,
 NATS and ML ports, so run the lab on a controlled host/network and do not expose it
 through public tunnels or proxies.
@@ -33,14 +33,27 @@ lab credentials, and starts the authenticated gateway and console. It waits for 
 before opening the sign-in page and prints the credential-file path, never the credential.
 
 Keep the terminal open. Ctrl-C stops only the gateway and console started by this launcher;
-Docker dependencies and the PostgreSQL volume remain available. Existing listeners on
-3000 or 8080 are reported rather than terminated. Logs and the gateway binary are stored
-in a private run directory outside the repository.
+Docker dependencies and the PostgreSQL volume remain available. The launcher prefers
+3000 and 8080, skips occupied ports, and prints the selected console and gateway URLs.
+It passes the matching gateway address and console origin to both services for sign-in.
+It never terminates existing listeners. Logs and the gateway binary are stored in a
+private run directory outside the repository.
+
+Existing Docker dependencies belonging to this checkout retain their ports and database.
+New dependencies use Docker-assigned free ports bound to loopback. The launcher passes
+their addresses to the gateway and uses them for readiness checks. Separate checkouts
+get distinct Compose project names, container names and persistent database volumes.
+Manual Compose commands still use the fixed ports in compose.yaml; to manage launcher
+dependencies, use the printed Docker project name with Docker Desktop or
+`docker compose -p PROJECT -f /printed/run/directory/compose.json ps`.
+
+Ports are selected shortly before the app processes start. An unrelated process can
+still claim an app port in that short interval; rerun the launcher if this occurs.
 
 Optional flags: `--no-browser`, `--copy-token` (copy the analyst credential to the macOS
 clipboard), `--check` (prerequisites and ports only), `--console-port PORT`, and
-`--gateway-port PORT`. Each launch provisions a new credential registry; use the newly
-printed credential file for that run. The manual startup steps below remain available.
+`--gateway-port PORT` (preferred starting ports, also skip busy ports). Each launch
+provisions a new credential registry; use the newly printed credential file for that run. The manual startup steps below remain available.
 
 ## Install and start infrastructure
 
