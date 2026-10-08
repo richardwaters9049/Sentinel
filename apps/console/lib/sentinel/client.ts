@@ -435,3 +435,49 @@ export async function listBehaviourScores(
   );
   return readJSON<BehaviourScoreListResponse>(response);
 }
+
+export async function getBehaviourSettings(
+  signal?: AbortSignal,
+): Promise<import("./types").BehaviourSettings> {
+  const response = await fetch("/api/sentinel/api/v1/behaviour/settings", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<import("./types").BehaviourSettings>(response);
+}
+
+export async function updateBehaviourSettings(
+  anomalyThreshold: number,
+): Promise<import("./types").BehaviourSettings> {
+  const response = await fetch("/api/sentinel/api/v1/behaviour/settings", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sentinel-Actor": "sentinel-console",
+    },
+    body: JSON.stringify({ anomaly_threshold: anomalyThreshold }),
+  });
+  return readJSON<import("./types").BehaviourSettings>(response);
+}
+
+export async function listBehaviourModels(
+  signal?: AbortSignal,
+): Promise<import("./types").BehaviourModelListResponse> {
+  const response = await fetch("/api/sentinel/api/v1/behaviour/models", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<import("./types").BehaviourModelListResponse>(response);
+}
+
+export async function listBehaviourEvaluations(
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<import("./types").BehaviourEvaluationListResponse> {
+  const bounded = Math.min(Math.max(limit, 1), 100);
+  const response = await fetch(
+    "/api/sentinel/api/v1/behaviour/evaluations?limit=" + String(bounded),
+    { cache: "no-store", signal },
+  );
+  return readJSON<import("./types").BehaviourEvaluationListResponse>(response);
+}

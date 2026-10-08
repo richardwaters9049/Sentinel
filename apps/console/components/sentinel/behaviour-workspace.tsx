@@ -5,7 +5,9 @@ import {
   AlertTriangle,
   BrainCircuit,
   Clock3,
+  FlaskConical,
   RefreshCcw,
+  Save,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -21,11 +23,18 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   getBehaviourMetrics,
+  getBehaviourSettings,
+  listBehaviourEvaluations,
+  listBehaviourModels,
   listBehaviourScores,
+  updateBehaviourSettings,
 } from "@/lib/sentinel/client";
 import type {
+  BehaviourEvaluationRun,
   BehaviourMetrics,
+  BehaviourModelRecord,
   BehaviourScore,
+  BehaviourSettings,
 } from "@/lib/sentinel/types";
 
 function scoreTone(score: number) {
@@ -48,6 +57,11 @@ export default function BehaviourWorkspace() {
   const [metrics, setMetrics] = useState<BehaviourMetrics | null>(null);
   const [scores, setScores] = useState<BehaviourScore[]>([]);
   const [selectedID, setSelectedID] = useState("");
+  const [settings, setSettings] = useState<BehaviourSettings | null>(null);
+  const [models, setModels] = useState<BehaviourModelRecord[]>([]);
+  const [evaluations, setEvaluations] = useState<BehaviourEvaluationRun[]>([]);
+  const [thresholdDraft, setThresholdDraft] = useState(65);
+  const [savingThreshold, setSavingThreshold] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -55,12 +69,25 @@ export default function BehaviourWorkspace() {
     setLoading(true);
     setError("");
     try {
-      const [metricData, scoreData] = await Promise.all([
+      const [
+        metricData,
+        scoreData,
+        settingsData,
+        modelData,
+        evaluationData,
+      ] = await Promise.all([
         getBehaviourMetrics(),
         listBehaviourScores(100),
+        getBehaviourSettings(),
+        listBehaviourModels(),
+        listBehaviourEvaluations(8),
       ]);
       setMetrics(metricData);
       setScores(scoreData.scores);
+      setSettings(settingsData);
+      setThresholdDraft(settingsData.anomaly_threshold);
+      setModels(modelData.models);
+      setEvaluations(evaluationData.evaluations);
       setSelectedID((current) => current || scoreData.scores[0]?.event_id || "");
     } catch (cause) {
       setError(
@@ -73,15 +100,41 @@ export default function BehaviourWorkspace() {
     }
   }
 
+
+  async function saveThreshold() {
+    setSavingThreshold(true);
+    setError("");
+    try {
+      const updated = await updateBehaviourSettings(thresholdDraft);
+      setSettings(updated);
+      setThresholdDraft(updated.anomaly_threshold);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Behaviour threshold could not be updated",
+      );
+    } finally {
+      setSavingThreshold(false);
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
       getBehaviourMetrics(controller.signal),
       listBehaviourScores(100, controller.signal),
+      getBehaviourSettings(controller.signal),
+      listBehaviourModels(controller.signal),
+      listBehaviourEvaluations(8, controller.signal),
     ])
-      .then(([metricData, scoreData]) => {
+      .then(([metricData, scoreData, settingsData, modelData, evaluationData]) => {
         setMetrics(metricData);
         setScores(scoreData.scores);
+        setSettings(settingsData);
+        setThresholdDraft(settingsData.anomaly_threshold);
+        setModels(modelData.models);
+        setEvaluations(evaluationData.evaluations);
         setSelectedID(scoreData.scores[0]?.event_id ?? "");
       })
       .catch((cause) => {
@@ -106,6 +159,11 @@ export default function BehaviourWorkspace() {
       (metrics.anomalous_scores / metrics.total_scores) * 100,
     );
   }, [metrics]);
+
+  const activeModel = models.find((model) => model.status === "active") ?? models[0];
+  const latestEvaluation = evaluations[0];
+  const thresholdChanged =
+    settings !== null && thresholdDraft !== settings.anomaly_threshold;
 
   return (
     <main className="sentinel-grid sentinel-glow min-h-screen bg-[#070a0f] text-slate-100">
@@ -185,6 +243,133 @@ export default function BehaviourWorkspace() {
                 </motion.div>
               );
             })}
+          </section>
+
+
+          <section className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+            <Card className="overflow-hidden rounded-[1.4rem] border border-violet-400/15 bg-gradient-to-br from-violet-400/[0.06] via-[#0c1119] to-cyan-400/[0.03] py-0">
+              <CardHeader className="px-5 pb-4 pt-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl border border-violet-400/15 bg-violet-400/[0.06]">
+                      <ShieldCheck className="size-4 text-violet-300" />
+                    </div>
+                    <div>
+                      <div className="text-[0.58rem] font-semibold tracking-[0.1em] text-violet-300/65">
+                        MODEL GOVERNANCE
+                      </div>
+                      <h2 className="mt-1.5 text-[0.95rem] font-semibold text-slate-100">
+                        Detection sensitivity
+                      </h2>
+                      <p className="mt-1 max-w-xl text-[0.62rem] leading-5 text-slate-600">
+                        Change the operational anomaly threshold without retraining the model.
+                        New scores use this value immediately; historical scores keep the threshold
+                        that was active when they were created.
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="w-fit border-violet-400/20 bg-violet-400/[0.05] text-[0.55rem] text-violet-300"
+                  >
+                    {activeModel?.status.toUpperCase() ?? "ACTIVE"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <Separator className="bg-violet-400/10" />
+              <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-end">
+                <div>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <div className="text-[1.65rem] font-bold tracking-[-0.04em] text-white">
+                        {thresholdDraft}
+                      </div>
+                      <div className="mt-1 text-[0.54rem] font-semibold tracking-[0.09em] text-slate-700">
+                        ANOMALY THRESHOLD
+                      </div>
+                    </div>
+                    <div className="text-right text-[0.56rem] leading-5 text-slate-700">
+                      <div>1 sensitive</div>
+                      <div>99 strict</div>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={99}
+                    value={thresholdDraft}
+                    onChange={(event) => setThresholdDraft(Number(event.target.value))}
+                    className="mt-4 h-1.5 w-full cursor-pointer accent-violet-400"
+                    aria-label="Behaviour anomaly threshold"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[0.56rem] leading-5 text-slate-700">
+                    <span>{activeModel?.model_version ?? "sentinel-behaviour-iforest-v1"}</span>
+                    <span>{activeModel?.feature_schema.length ?? 0} features</span>
+                    <span>seed {activeModel?.random_seed ?? 707}</span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => void saveThreshold()}
+                  disabled={!thresholdChanged || savingThreshold}
+                  className="cursor-pointer bg-violet-300 text-slate-950 hover:bg-violet-200 disabled:cursor-not-allowed"
+                >
+                  <Save className="mr-2 size-3.5" />
+                  {savingThreshold ? "Saving..." : "Apply threshold"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="surface-card rounded-[1.4rem] border-slate-800/85 bg-transparent py-0">
+              <CardHeader className="px-5 pb-4 pt-5">
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="size-4 text-cyan-300" />
+                  <div>
+                    <h2 className="text-[0.9rem] font-semibold text-slate-100">
+                      Validation record
+                    </h2>
+                    <p className="mt-1 text-[0.61rem] leading-5 text-slate-600">
+                      Latest persisted synthetic evaluation for the active model.
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <Separator className="bg-slate-800/80" />
+              <CardContent className="p-4">
+                {latestEvaluation ? (
+                  <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    {[
+                      [Math.round(latestEvaluation.precision * 100) + "%", "precision"],
+                      [Math.round(latestEvaluation.recall * 100) + "%", "recall"],
+                      [
+                        Math.round(latestEvaluation.false_positive_rate * 100) + "%",
+                        "false positive",
+                      ],
+                    ].map(([value, label]) => (
+                      <div
+                        key={label}
+                        className="rounded-xl border border-slate-800/70 bg-slate-950/30 p-3"
+                      >
+                        <div className="text-[0.86rem] font-semibold text-cyan-200">
+                          {value}
+                        </div>
+                        <div className="mt-1 text-[0.5rem] font-semibold tracking-[0.08em] text-slate-700">
+                          {label.toUpperCase()}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="sm:col-span-3 xl:col-span-1 2xl:col-span-3 mt-1 text-[0.55rem] leading-5 text-slate-700">
+                      {latestEvaluation.dataset_name} · threshold {latestEvaluation.threshold}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-800 p-4 text-[0.62rem] leading-5 text-slate-600">
+                    No evaluation has been recorded yet. Run the Phase 7 evaluation workflow to
+                    persist the first validation record.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(430px,1.05fr)]">

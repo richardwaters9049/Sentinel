@@ -3,13 +3,17 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import os
 
 from .contracts import BehaviourScoreRequest
-from .model import BehaviourModel
+from .model import BehaviourModel, MODEL_VERSION
 
 
 @dataclass(frozen=True)
 class Evaluation:
+    model_version: str
+    dataset_name: str
+    threshold: int
     normal_count: int
     anomaly_count: int
     true_positive: int
@@ -21,13 +25,13 @@ class Evaluation:
     false_positive_rate: float
 
 
-def evaluate_model() -> Evaluation:
+def evaluate_model(threshold: int = 65) -> Evaluation:
     model = BehaviourModel()
     normal = _normal_validation_rows()
     anomalies = _anomaly_validation_rows()
 
-    normal_scores = [model.score(row) for row in normal]
-    anomaly_scores = [model.score(row) for row in anomalies]
+    normal_scores = [model.score(row.model_copy(update={"threshold": threshold})) for row in normal]
+    anomaly_scores = [model.score(row.model_copy(update={"threshold": threshold})) for row in anomalies]
 
     false_positive = sum(score.anomalous for score in normal_scores)
     true_negative = len(normal_scores) - false_positive
@@ -46,6 +50,9 @@ def evaluate_model() -> Evaluation:
     )
 
     return Evaluation(
+        model_version=MODEL_VERSION,
+        dataset_name="synthetic-northstar-validation-v1",
+        threshold=threshold,
         normal_count=len(normal),
         anomaly_count=len(anomalies),
         true_positive=true_positive,
@@ -109,4 +116,5 @@ def _anomaly_validation_rows() -> list[BehaviourScoreRequest]:
 
 
 if __name__ == "__main__":
-    print(json.dumps(asdict(evaluate_model()), sort_keys=True))
+    threshold = int(os.getenv("SENTINEL_BEHAVIOUR_THRESHOLD", "65"))
+    print(json.dumps(asdict(evaluate_model(threshold)), sort_keys=True))

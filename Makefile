@@ -15,6 +15,7 @@ help:
 	@echo "  make console-build    Build the analyst console"
 	@echo "  make ml-test          Run Python behavioural analytics tests"
 	@echo "  make ml-evaluate      Evaluate the synthetic behavioural model"
+	@echo "  make record-phase7-evaluation Persist a governed Phase 7 evaluation run"
 	@echo "  make test             Run all current tests"
 	@echo "  make fmt              Format Go code"
 	@echo "  make check            Formatting, vet, tests, and race detector"
@@ -151,3 +152,6 @@ ml-test:
 ml-evaluate:
 	docker compose build ml
 	docker compose run --rm ml python -m app.evaluation
+
+record-phase7-evaluation:
+	./scripts/phase7-evaluate-record.sh

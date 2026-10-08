@@ -390,3 +390,47 @@ export type BehaviourMetrics = {
   average_score: number;
   last_scored_at?: string;
 };
+
+export type BehaviourSettings = {
+  anomaly_threshold: number;
+  updated_by?: string;
+  updated_at: string;
+};
+
+export type BehaviourModelRecord = {
+  model_version: string;
+  model_kind: string;
+  status: "active" | "retired";
+  feature_schema: string[];
+  training_source: string;
+  random_seed?: number;
+  registered_at: string;
+};
+
+export type BehaviourModelListResponse = {
+  count: number;
+  models: BehaviourModelRecord[];
+};
+
+export type BehaviourEvaluationRun = {
+  id: number;
+  model_version: string;
+  dataset_name: string;
+  threshold: number;
+  normal_count: number;
+  anomaly_count: number;
+  true_positive: number;
+  false_positive: number;
+  true_negative: number;
+  false_negative: number;
+  precision: number;
+  recall: number;
+  false_positive_rate: number;
+  actor_id?: string;
+  created_at: string;
+};
+
+export type BehaviourEvaluationListResponse = {
+  count: number;
+  evaluations: BehaviourEvaluationRun[];
+};

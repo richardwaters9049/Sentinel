@@ -23,6 +23,12 @@ type BaselineContext struct {
 	OTActivityRate24h         float64 `json:"ot_activity_rate_24h"`
 }
 
+type Settings struct {
+	AnomalyThreshold int       `json:"anomaly_threshold"`
+	UpdatedBy        string    `json:"updated_by,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 type ScoreRequest struct {
 	EventID         string          `json:"event_id"`
 	EntityID        string          `json:"entity_id"`
@@ -35,6 +41,7 @@ type ScoreRequest struct {
 	DestinationZone string          `json:"destination_zone"`
 	DestinationPort int             `json:"destination_port"`
 	ActorType       string          `json:"actor_type"`
+	Threshold       int             `json:"threshold"`
 	Baseline        BaselineContext `json:"baseline"`
 }
 

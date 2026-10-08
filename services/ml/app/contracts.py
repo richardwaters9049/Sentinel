@@ -29,6 +29,7 @@ class BehaviourScoreRequest(BaseModel):
     destination_zone: str = Field(default="", max_length=64)
     destination_port: int = Field(default=0, ge=0, le=65535)
     actor_type: str = Field(default="", max_length=64)
+    threshold: int = Field(default=65, ge=1, le=99)
     baseline: BaselineContext = Field(default_factory=BaselineContext)
 
 

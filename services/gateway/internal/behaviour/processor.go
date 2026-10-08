@@ -15,6 +15,7 @@ type Scorer interface {
 
 type Store interface {
 	GetBehaviourBaselineContext(context.Context, string, string, time.Time) (BaselineContext, error)
+	GetBehaviourSettings(context.Context) (Settings, error)
 	SaveBehaviourScore(context.Context, Score) error
 }
 
@@ -56,6 +57,11 @@ func (p *Processor) Process(ctx context.Context, event telemetry.Event) error {
 		return fmt.Errorf("load behavioural baseline for %s %s: %w", entityType, entityID, err)
 	}
 
+	settings, err := p.store.GetBehaviourSettings(ctx)
+	if err != nil {
+		return fmt.Errorf("load behavioural settings: %w", err)
+	}
+
 	request := ScoreRequest{
 		EventID:    event.EventID,
 		EntityID:   entityID,
@@ -64,6 +70,7 @@ func (p *Processor) Process(ctx context.Context, event telemetry.Event) error {
 		Category:   event.Event.Category,
 		Action:     event.Event.Action,
 		Outcome:    event.Event.Outcome,
+		Threshold:  settings.AnomalyThreshold,
 		Baseline:   baseline,
 	}
 	if event.Asset != nil {

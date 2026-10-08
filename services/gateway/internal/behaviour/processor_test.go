@@ -49,6 +49,10 @@ func (f *fakeStore) GetBehaviourBaselineContext(
 	return f.baseline, f.err
 }
 
+func (f *fakeStore) GetBehaviourSettings(_ context.Context) (Settings, error) {
+	return Settings{AnomalyThreshold: 65}, f.err
+}
+
 func (f *fakeStore) SaveBehaviourScore(_ context.Context, score Score) error {
 	f.saved = score
 	return f.err
@@ -100,6 +104,9 @@ func TestProcessorUsesActorAsPrimaryEntityAndPersistsScore(t *testing.T) {
 	}
 	if scorer.request.Baseline.PriorEvents60m != 7 {
 		t.Fatalf("expected rolling baseline context to be forwarded, got %#v", scorer.request.Baseline)
+	}
+	if scorer.request.Threshold != 65 {
+		t.Fatalf("expected governance threshold 65, got %d", scorer.request.Threshold)
 	}
 	if scorer.request.SourceZone != "corporate" {
 		t.Fatalf("unexpected source zone %q", scorer.request.SourceZone)

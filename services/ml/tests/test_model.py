@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from app.contracts import BehaviourScoreRequest
-from app.model import ANOMALY_THRESHOLD, BehaviourModel
+from app.model import DEFAULT_ANOMALY_THRESHOLD, BehaviourModel
 
 
 def request_for(**overrides: object) -> BehaviourScoreRequest:
@@ -26,7 +26,7 @@ def test_normal_activity_scores_below_threshold() -> None:
 
     result = model.score(request_for())
 
-    assert result.anomaly_score < ANOMALY_THRESHOLD
+    assert result.anomaly_score < DEFAULT_ANOMALY_THRESHOLD
     assert result.anomalous is False
     assert result.severity == "low"
 
@@ -46,7 +46,7 @@ def test_unusual_ot_weekend_activity_is_explainable() -> None:
         )
     )
 
-    assert result.anomaly_score >= ANOMALY_THRESHOLD
+    assert result.anomaly_score >= DEFAULT_ANOMALY_THRESHOLD
     assert result.anomalous is True
     assert result.severity in {"medium", "high"}
     features = {item.feature for item in result.explanations}

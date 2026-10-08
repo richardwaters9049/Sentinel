@@ -33,6 +33,11 @@ type BehaviourStore interface {
 	GetEventBehaviourScore(context.Context, string) (behaviour.Score, error)
 	ListBehaviourScores(context.Context, int) ([]behaviour.Score, error)
 	BehaviourMetrics(context.Context) (database.BehaviourMetrics, error)
+	GetBehaviourSettings(context.Context) (behaviour.Settings, error)
+	UpdateBehaviourSettings(context.Context, int, string) (behaviour.Settings, error)
+	ListBehaviourModels(context.Context) ([]database.BehaviourModelRecord, error)
+	SaveBehaviourEvaluationRun(context.Context, database.BehaviourEvaluationInput, string) (database.BehaviourEvaluationRun, error)
+	ListBehaviourEvaluationRuns(context.Context, int) ([]database.BehaviourEvaluationRun, error)
 }
 
 type IntelligenceStore interface {
@@ -121,6 +126,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
 	s.mux.HandleFunc("GET /api/v1/behaviour/scores", s.handleBehaviourScores)
 	s.mux.HandleFunc("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics)
+	s.mux.HandleFunc("GET /api/v1/behaviour/settings", s.handleBehaviourSettings)
+	s.mux.HandleFunc("PATCH /api/v1/behaviour/settings", s.handleBehaviourSettingsUpdate)
+	s.mux.HandleFunc("GET /api/v1/behaviour/models", s.handleBehaviourModels)
+	s.mux.HandleFunc("GET /api/v1/behaviour/evaluations", s.handleBehaviourEvaluations)
+	s.mux.HandleFunc("POST /api/v1/behaviour/evaluations", s.handleBehaviourEvaluationCreate)
 	s.mux.HandleFunc("GET /api/v1/events/{id}/behaviour", s.handleEventBehaviour)
 	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
 	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
@@ -303,6 +313,135 @@ func (s *Server) handleEventBehaviour(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, score)
+}
+
+func (s *Server) handleBehaviourSettings(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	settings, err := store.GetBehaviourSettings(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behaviour settings could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
+func (s *Server) handleBehaviourSettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	var input struct {
+		AnomalyThreshold int `json:"anomaly_threshold"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body must contain a valid behaviour settings object")
+		return
+	}
+	if input.AnomalyThreshold < 1 || input.AnomalyThreshold > 99 {
+		writeAPIError(w, http.StatusBadRequest, "invalid_threshold", "anomaly_threshold must be between 1 and 99")
+		return
+	}
+
+	settings, err := store.UpdateBehaviourSettings(
+		r.Context(),
+		input.AnomalyThreshold,
+		actorID,
+	)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "update_failed", "behaviour settings could not be updated")
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
+func (s *Server) handleBehaviourModels(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	models, err := store.ListBehaviourModels(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behaviour models could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":  len(models),
+		"models": models,
+	})
+}
+
+func (s *Server) handleBehaviourEvaluations(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	limit := 20
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeAPIError(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 100")
+			return
+		}
+		limit = parsed
+	}
+
+	runs, err := store.ListBehaviourEvaluationRuns(r.Context(), limit)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behaviour evaluations could not be queried")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":       len(runs),
+		"evaluations": runs,
+	})
+}
+
+func (s *Server) handleBehaviourEvaluationCreate(w http.ResponseWriter, r *http.Request) {
+	store, ok := s.analyst.(BehaviourStore)
+	if !ok || store == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural analytics are unavailable")
+		return
+	}
+
+	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	if actorID == "" {
+		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
+		return
+	}
+
+	var input database.BehaviourEvaluationInput
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body must contain a valid behaviour evaluation")
+		return
+	}
+
+	run, err := store.SaveBehaviourEvaluationRun(r.Context(), input, actorID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_evaluation", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, run)
 }
 
 func (s *Server) handleIntelligenceIndicators(w http.ResponseWriter, r *http.Request) {

@@ -19,7 +19,7 @@ from .features import FEATURE_NAMES, FeatureVector, extract_features
 MODEL_VERSION = "sentinel-behaviour-iforest-v1"
 MODEL_KIND = "IsolationForest"
 RANDOM_SEED = 707
-ANOMALY_THRESHOLD = 65
+DEFAULT_ANOMALY_THRESHOLD = 65
 
 
 @dataclass(frozen=True)
@@ -55,9 +55,10 @@ class BehaviourModel:
         anomaly_score = self._scale_score(raw)
         explanations = self._explain(vector)
 
+        threshold = request.threshold
         if anomaly_score >= 85:
             severity = "high"
-        elif anomaly_score >= ANOMALY_THRESHOLD:
+        elif anomaly_score >= threshold:
             severity = "medium"
         else:
             severity = "low"
@@ -71,8 +72,8 @@ class BehaviourModel:
             model_kind=MODEL_KIND,
             anomaly_score=anomaly_score,
             severity=severity,
-            anomalous=anomaly_score >= ANOMALY_THRESHOLD,
-            threshold=ANOMALY_THRESHOLD,
+            anomalous=anomaly_score >= threshold,
+            threshold=threshold,
             explanations=explanations,
         )
 

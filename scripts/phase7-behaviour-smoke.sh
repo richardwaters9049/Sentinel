@@ -77,6 +77,33 @@ done
 
 BASE="http://127.0.0.1:${GATEWAY_PORT}/api/v1"
 
+echo "Verifying model registry and governed threshold..."
+curl -fsS "${BASE}/behaviour/settings" >/tmp/sentinel-phase7-settings-before.json
+curl -fsS "${BASE}/behaviour/models" >/tmp/sentinel-phase7-models.json
+
+ORIGINAL_THRESHOLD="$(python3 - <<'PY'
+import json
+print(json.load(open("/tmp/sentinel-phase7-settings-before.json"))["anomaly_threshold"])
+PY
+)"
+
+curl -fsS   -X PATCH   -H "Content-Type: application/json"   -H "X-Sentinel-Actor: phase7-regression"   --data '{"anomaly_threshold":71}'   "${BASE}/behaviour/settings" >/tmp/sentinel-phase7-settings-after.json
+
+python3 - <<'PY'
+import json
+
+models=json.load(open("/tmp/sentinel-phase7-models.json"))
+settings=json.load(open("/tmp/sentinel-phase7-settings-after.json"))
+
+assert settings["anomaly_threshold"] == 71
+assert any(
+    model["model_version"] == "sentinel-behaviour-iforest-v1"
+    and model["status"] == "active"
+    and len(model["feature_schema"]) >= 12
+    for model in models["models"]
+), models
+PY
+
 echo "Submitting baseline-like behaviour..."
 "${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-normal   -delay 0s >/tmp/sentinel-phase7-normal.log
 
@@ -155,12 +182,14 @@ metrics=json.load(open("/tmp/sentinel-phase7-metrics.json"))
 
 assert normal["event_id"] == "${NORMAL_EVENT_ID}"
 assert normal["model_kind"] == "IsolationForest"
+assert normal["threshold"] == 71, normal
 assert normal["anomalous"] is False, normal
 assert normal["anomaly_score"] < normal["threshold"], normal
 
 assert anomaly["event_id"] == "${ANOMALY_EVENT_ID}"
 assert anomaly["entity_id"] == "svc-behaviour-anomaly"
 assert anomaly["model_version"] == "sentinel-behaviour-iforest-v1"
+assert anomaly["threshold"] == 71, anomaly
 assert anomaly["anomalous"] is True, anomaly
 assert anomaly["anomaly_score"] >= anomaly["threshold"], anomaly
 assert anomaly["severity"] in {"medium", "high"}
@@ -234,6 +263,27 @@ import json
 detail=json.load(open("/tmp/sentinel-phase7-investigation.json"))
 assert any(score["event_id"] == "${FINDING_EVENT_ID}" for score in detail["behaviour_scores"]), detail
 PY
+echo "Persisting governed evaluation record..."
+SENTINEL_API_URL="http://127.0.0.1:${GATEWAY_PORT}" SENTINEL_ACTOR="phase7-regression" ./scripts/phase7-evaluate-record.sh >/tmp/sentinel-phase7-evaluation-record.json
+
+curl -fsS "${BASE}/behaviour/evaluations?limit=5"   >/tmp/sentinel-phase7-evaluations.json
+
+python3 - <<'PY'
+import json
+
+created=json.load(open("/tmp/sentinel-phase7-evaluation-record.json"))
+history=json.load(open("/tmp/sentinel-phase7-evaluations.json"))
+
+assert created["model_version"] == "sentinel-behaviour-iforest-v1"
+assert created["dataset_name"] == "synthetic-northstar-validation-v1"
+assert created["threshold"] == 71
+assert created["recall"] >= 0.90
+assert created["false_positive_rate"] <= 0.15
+assert any(item["id"] == created["id"] for item in history["evaluations"])
+PY
+
+curl -fsS   -X PATCH   -H "Content-Type: application/json"   -H "X-Sentinel-Actor: phase7-regression"   --data "{\"anomaly_threshold\":${ORIGINAL_THRESHOLD}}"   "${BASE}/behaviour/settings" >/tmp/sentinel-phase7-settings-restored.json
+
 echo "Running Python model tests and evaluation..."
 docker compose run --rm ml python -m pytest -q
 docker compose run --rm ml python -m app.evaluation   >/tmp/sentinel-phase7-evaluation.json
@@ -250,6 +300,9 @@ PY
 echo "Phase 7 behavioural-analytics smoke test passed."
 echo "  Python ML service health: verified"
 echo "  deterministic Isolation Forest model: verified"
+echo "  model registry provenance: verified"
+echo "  governed threshold control: verified"
+echo "  persisted evaluation history: verified"
 echo "  baseline-like activity: verified"
 echo "  anomalous cross-zone behaviour: verified"
 echo "  rolling entity baselines: verified"

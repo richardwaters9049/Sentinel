@@ -223,12 +223,17 @@ This keeps the first runtime slice deterministic while leaving room for richer e
 
 ## Analyst APIs
 
-Phase 7 begins with:
+Phase 7 now exposes:
 
 ```text
-GET /api/v1/behaviour/scores
-GET /api/v1/behaviour/metrics
-GET /api/v1/events/{id}/behaviour
+GET   /api/v1/behaviour/scores
+GET   /api/v1/behaviour/metrics
+GET   /api/v1/behaviour/settings
+PATCH /api/v1/behaviour/settings
+GET   /api/v1/behaviour/models
+GET   /api/v1/behaviour/evaluations
+POST  /api/v1/behaviour/evaluations
+GET   /api/v1/events/{id}/behaviour
 ```
 
 The score list is bounded to 200 records.
@@ -240,6 +245,87 @@ Metrics currently report:
 - high-severity scores;
 - average anomaly score;
 - most recent scoring time.
+
+## Model governance
+
+Migration:
+
+```text
+0014_phase7_model_governance.sql
+```
+
+Phase 7 now separates model provenance, operational scoring policy, and evaluation history.
+
+### Model registry
+
+`behaviour_models` records:
+
+- model version;
+- model kind;
+- lifecycle state;
+- feature schema;
+- training-source description;
+- deterministic random seed;
+- registration time.
+
+The active v1 model is registered as:
+
+```text
+sentinel-behaviour-iforest-v1
+IsolationForest
+12 explicit features
+synthetic Northstar baseline
+seed 707
+```
+
+This gives analysts and future model-lifecycle code a durable provenance record instead of relying only on Python constants.
+
+### Threshold settings
+
+`behaviour_settings` stores the operational anomaly threshold independently from the trained model.
+
+Changing the threshold does not retrain or mutate the model.
+
+New scores use the latest persisted threshold. Existing scores keep the exact threshold used at their scoring time.
+
+Threshold changes require the current development actor bridge and record who last changed the setting.
+
+The initial allowed range is:
+
+```text
+1–99
+```
+
+### Evaluation history
+
+`behaviour_evaluation_runs` stores reproducible validation runs with:
+
+- model version;
+- dataset identity;
+- threshold used;
+- confusion-matrix counts;
+- precision;
+- recall;
+- false-positive rate;
+- actor;
+- timestamp.
+
+The repository-owned workflow is:
+
+```bash
+make record-phase7-evaluation
+```
+
+It:
+
+1. queries the live governed threshold;
+2. evaluates the deterministic synthetic validation set with that threshold;
+3. submits the metrics to the gateway;
+4. persists the run against the registered model version.
+
+The gateway validates confusion-matrix totals and rate bounds before accepting an evaluation.
+
+Synthetic evaluation results remain development evidence only and are not represented as production SOC accuracy.
 
 ## Analyst console
 
@@ -332,9 +418,7 @@ The Phase 7 smoke test verifies:
 
 ## Remaining Phase 7 work
 
-- add model lifecycle/version registry;
-- persist evaluation runs;
-- add threshold/configuration controls;
 - add richer analyst pivots by entity;
-- add drift monitoring;
-- mature the behavioural catalogue and add the Phase 7 final regression.
+- add drift monitoring and baseline-health signals;
+- mature the behavioural catalogue;
+- add the Phase 7 final regression and completion gate.
