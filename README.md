@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation complete; Phase 6 intelligence and enrichment complete; Phase 7 behavioural analytics in progress.
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation complete; Phase 6 intelligence and enrichment complete; Phase 7 behavioural analytics complete (simulated scope; documented model-coverage limitations).
 
 The first production-shaped vertical slice is now implemented:
 
@@ -1152,7 +1152,8 @@ Raw event storage and normalised event storage may be separated later if volume 
 - analyst-visible explanations;
 - entity-scoped score exploration and matching metrics (identity, asset or collector);
 - model-isolated score-distribution monitoring, cold-context and freshness signals, live analytics availability and matching synthetic evaluation health;
-- five versioned behavioural profiles with per-profile synthetic coverage, known limitations and analyst review guidance.
+- five versioned behavioural profiles with per-profile synthetic coverage, known limitations and analyst review guidance;
+- a passing combined regression gate: `make final-phase7` (see [completion evidence](docs/architecture/phase-7-completion.md)).
 
 ### Phase 8 — Platform hardening
 

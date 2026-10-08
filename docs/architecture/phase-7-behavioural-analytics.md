@@ -2,7 +2,10 @@
 
 ## Status
 
-In progress on:
+Complete for the documented simulated scope, with the final regression gate passed on
+8 October 2026. See [completion evidence and accepted limitations](phase-7-completion.md).
+
+Implemented on:
 
 ```text
 feat/phase-7-behavioural-analytics
@@ -430,9 +433,12 @@ The Behaviour workspace offers an entity pivot from the selected score's rolling
 and a clear action back to all entities. Loading a different scope cancels stale requests.
 Historical baseline snapshots remain unchanged.
 
-## Remaining Phase 7 work
+## Phase 7 completion
 
-- add the Phase 7 final regression and completion gate.
+The combined gate is available as `make final-phase7`. It passed on 8 October 2026.
+See [completion evidence](phase-7-completion.md) for required checks, local dependency
+side effects and accepted coverage limitations. No outstanding Phase Seven work remains
+within this documented simulated scope; platform hardening remains Phase Eight.
 
 ## Distribution monitoring and baseline health
 
@@ -486,9 +492,11 @@ Thirty correlated events are not thirty independent observations. Cold context u
 snapshot event counts, whose source timestamps still affect their coverage. Review these
 signals alongside explanations, deterministic findings and collection health.
 
-Verification includes monitor unit and API tests, optional PostgreSQL integration tests in a
-disposable schema (`SENTINEL_TEST_DATABASE_URL`), migration rerun checks, and monitoring
-contracts/entity isolation in the Phase Seven smoke test. Phase Seven remains in progress.
+Verification includes monitor unit and API tests, PostgreSQL integration tests in a
+disposable schema (`SENTINEL_TEST_DATABASE_URL`, required by the final gate and CI),
+migration rerun checks, and monitoring
+contracts/entity isolation in the Phase Seven smoke test. These checks are included in
+the completed Phase Seven regression gate.
 
 ## Behavioural catalogue maturity
 
@@ -552,5 +560,5 @@ keyboard interaction and introduce no decorative motion. Tests cover malformed/o
 responses, invalid provenance and metrics, cancellation, disabled services, fixed-threshold
 separation, deterministic contrast cases and the model-wide proxy contract.
 
-The remaining Phase Seven gate must assess these limitations explicitly before declaring
-completion. Catalogue maturity does not mean all profiles have reliable detection coverage.
+The completed Phase Seven gate asserts and accepts these measured limitations explicitly.
+Catalogue maturity does not mean all profiles have reliable detection coverage.

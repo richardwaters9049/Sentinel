@@ -9,16 +9,32 @@ NATS_CONTAINER="sentinel-phase7-nats-smoke"
 GATEWAY_PID=""
 GATEWAY_BINARY="/tmp/sentinel-phase7-smoke-gateway"
 SIM_BINARY="/tmp/sentinel-phase7-smoke-sim"
+ORIGINAL_THRESHOLD=""
+THRESHOLD_CHANGED=false
 
 cleanup() {
+  local status=$?
+  trap - EXIT
+  if [[ "${THRESHOLD_CHANGED}" == true ]]; then
+    if ! curl --max-time 5 -fsS -X PATCH -H "Content-Type: application/json" \
+      -H "X-Sentinel-Actor: phase7-regression" \
+      --data "{\"anomaly_threshold\":${ORIGINAL_THRESHOLD}}" \
+      "${BASE}/behaviour/settings" >/dev/null; then
+      echo "Failed to restore the original behavioural threshold ${ORIGINAL_THRESHOLD}." >&2
+      status=1
+    fi
+  fi
   if [[ -n "${GATEWAY_PID}" ]] && kill -0 "${GATEWAY_PID}" 2>/dev/null; then
     kill "${GATEWAY_PID}" 2>/dev/null || true
     wait "${GATEWAY_PID}" 2>/dev/null || true
   fi
   docker rm -f "${NATS_CONTAINER}" >/dev/null 2>&1 || true
   rm -f "${GATEWAY_BINARY}" "${SIM_BINARY}"
+  exit "${status}"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 cd "${ROOT_DIR}"
 
@@ -87,6 +103,7 @@ print(json.load(open("/tmp/sentinel-phase7-settings-before.json"))["anomaly_thre
 PY
 )"
 
+THRESHOLD_CHANGED=true
 curl -fsS   -X PATCH   -H "Content-Type: application/json"   -H "X-Sentinel-Actor: phase7-regression"   --data '{"anomaly_threshold":71}'   "${BASE}/behaviour/settings" >/tmp/sentinel-phase7-settings-after.json
 
 python3 - <<'PY'
@@ -349,6 +366,13 @@ assert any(item["id"] == created["id"] for item in history["evaluations"])
 PY
 
 curl -fsS   -X PATCH   -H "Content-Type: application/json"   -H "X-Sentinel-Actor: phase7-regression"   --data "{\"anomaly_threshold\":${ORIGINAL_THRESHOLD}}"   "${BASE}/behaviour/settings" >/tmp/sentinel-phase7-settings-restored.json
+
+python3 - "${ORIGINAL_THRESHOLD}" <<'PYVERIFY'
+import json
+import sys
+assert json.load(open("/tmp/sentinel-phase7-settings-restored.json"))["anomaly_threshold"] == int(sys.argv[1])
+PYVERIFY
+THRESHOLD_CHANGED=false
 
 echo "Running Python model tests and evaluation..."
 docker compose run --rm ml python -m pytest -q
