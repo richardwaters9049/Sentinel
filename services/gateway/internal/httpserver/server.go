@@ -126,6 +126,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
 	s.mux.HandleFunc("GET /api/v1/behaviour/scores", s.handleBehaviourScores)
 	s.mux.HandleFunc("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics)
+	s.mux.HandleFunc("GET /api/v1/behaviour/monitor", s.handleBehaviourMonitor)
 	s.mux.HandleFunc("GET /api/v1/behaviour/settings", s.handleBehaviourSettings)
 	s.mux.HandleFunc("PATCH /api/v1/behaviour/settings", s.handleBehaviourSettingsUpdate)
 	s.mux.HandleFunc("GET /api/v1/behaviour/models", s.handleBehaviourModels)
@@ -992,4 +993,38 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) handleBehaviourMonitor(w http.ResponseWriter, r *http.Request) {
+	query, err := behaviourQuery(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_entity", err.Error())
+		return
+	}
+	store, ok := s.analyst.(interface {
+		BehaviourMonitor(context.Context, database.BehaviourQuery, time.Time) (behaviour.Monitor, error)
+	})
+	if !ok {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural monitoring is unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	monitor, err := store.BehaviourMonitor(ctx, query, time.Now().UTC())
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behavioural monitoring could not be queried")
+		return
+	}
+	if s.readiness != nil {
+		state := s.readiness.Check(ctx).Dependencies["ml"]
+		switch state {
+		case "ready":
+			monitor.Availability = behaviour.HealthSignal{Status: "available", Explanation: "The live ML dependency health check passed; this does not guarantee scoring throughput."}
+		case "unavailable":
+			monitor.Availability = behaviour.HealthSignal{Status: "unavailable", Explanation: "The live ML dependency health check failed."}
+		default:
+			monitor.Availability = behaviour.HealthSignal{Status: "disabled", Explanation: "ML is not configured as a readiness dependency."}
+		}
+	}
+	writeJSON(w, http.StatusOK, monitor)
 }

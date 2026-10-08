@@ -22,6 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
+  getBehaviourMonitor,
   getBehaviourMetrics,
   getBehaviourSettings,
   listBehaviourEvaluations,
@@ -32,6 +33,7 @@ import {
 import type { BehaviourEntityFilter } from "@/lib/sentinel/client";
 import type {
   BehaviourEvaluationRun,
+  BehaviourMonitor,
   BehaviourMetrics,
   BehaviourModelRecord,
   BehaviourScore,
@@ -55,6 +57,8 @@ function severityClass(severity: BehaviourScore["severity"]) {
 }
 
 export default function BehaviourWorkspace() {
+  const [monitor, setMonitor] = useState<BehaviourMonitor | null>(null);
+  const [monitorError, setMonitorError] = useState("");
   const [entity, setEntity] = useState<BehaviourEntityFilter>();
   const [metrics, setMetrics] = useState<BehaviourMetrics | null>(null);
   const [scores, setScores] = useState<BehaviourScore[]>([]);
@@ -64,10 +68,13 @@ export default function BehaviourWorkspace() {
   const [evaluations, setEvaluations] = useState<BehaviourEvaluationRun[]>([]);
   const [thresholdDraft, setThresholdDraft] = useState(65);
   const [savingThreshold, setSavingThreshold] = useState(false);
+  const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function changeEntity(next?: BehaviourEntityFilter) {
+    setMonitor(null);
+    setMonitorError("");
     setLoading(true);
     setError("");
     setScores([]);
@@ -76,45 +83,13 @@ export default function BehaviourWorkspace() {
     setEntity(next);
   }
 
-  async function refresh() {
+  function refresh() {
+    setMonitor(null);
+    setMonitorError("");
     setLoading(true);
     setError("");
-    try {
-      const [
-        metricData,
-        scoreData,
-        settingsData,
-        modelData,
-        evaluationData,
-      ] = await Promise.all([
-        getBehaviourMetrics(undefined, entity),
-        listBehaviourScores(100, undefined, entity),
-        getBehaviourSettings(),
-        listBehaviourModels(),
-        listBehaviourEvaluations(8),
-      ]);
-      setMetrics(metricData);
-      setScores(scoreData.scores);
-      setSettings(settingsData);
-      setThresholdDraft(settingsData.anomaly_threshold);
-      setModels(modelData.models);
-      setEvaluations(evaluationData.evaluations);
-      setSelectedID((current) =>
-        scoreData.scores.some((score) => score.event_id === current)
-          ? current
-          : scoreData.scores[0]?.event_id || "",
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Behavioural analytics could not be loaded",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setRevision((value) => value + 1);
   }
-
 
   async function saveThreshold() {
     setSavingThreshold(true);
@@ -123,6 +98,7 @@ export default function BehaviourWorkspace() {
       const updated = await updateBehaviourSettings(thresholdDraft);
       setSettings(updated);
       setThresholdDraft(updated.anomaly_threshold);
+      refresh();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -136,6 +112,11 @@ export default function BehaviourWorkspace() {
 
   useEffect(() => {
     const controller = new AbortController();
+    void getBehaviourMonitor(controller.signal, entity)
+      .then((data) => { if (!controller.signal.aborted) setMonitor(data); })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setMonitorError(cause instanceof Error ? cause.message : "Monitoring unavailable");
+      });
     void Promise.all([
       getBehaviourMetrics(controller.signal, entity),
       listBehaviourScores(100, controller.signal, entity),
@@ -151,7 +132,10 @@ export default function BehaviourWorkspace() {
         setThresholdDraft(settingsData.anomaly_threshold);
         setModels(modelData.models);
         setEvaluations(evaluationData.evaluations);
-        setSelectedID(scoreData.scores[0]?.event_id ?? "");
+        setSelectedID((current) =>
+          scoreData.scores.some((score) => score.event_id === current)
+            ? current : scoreData.scores[0]?.event_id ?? "",
+        );
       })
       .catch((cause) => {
         if (controller.signal.aborted) return;
@@ -166,7 +150,7 @@ export default function BehaviourWorkspace() {
       });
 
     return () => controller.abort();
-  }, [entity]);
+  }, [entity, revision]);
 
   const selected =
     scores.find((score) => score.event_id === selectedID) ?? scores[0];
@@ -243,6 +227,33 @@ export default function BehaviourWorkspace() {
               </Button>
             ) : null}
           </div>
+          <section aria-label="Behavioural health monitoring" className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+            <h2 className="text-sm font-semibold text-slate-200">Distribution and baseline health</h2>
+            <p className="mt-2 text-xs text-slate-400">Signals support investigation. Distribution changes do not prove model drift; scores are not compromise probabilities.</p>
+            {monitorError ? <p role="alert" className="mt-3 text-sm text-amber-200">Monitoring unavailable: {monitorError}</p> : !monitor ? <p role="status" className="mt-3 text-sm text-slate-400">Loading health signals…</p> : <>
+              <p className="mt-3 break-all text-xs text-slate-400">Model: {monitor.model_version || "No scored model"} · Checked {new Date(monitor.checked_at).toLocaleString("en-GB")}</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {([
+                  ["Observed distribution", monitor.distribution], ["Rolling context", monitor.baseline],
+                  ["Scoring freshness", monitor.freshness], ["Analytics availability", monitor.availability],
+                  ["Synthetic evaluation", monitor.evaluation],
+                ] as const).map(([label, signal]) => <div key={label} className="min-w-0 rounded-xl border border-slate-800 p-3">
+                  <h3 className="text-xs font-semibold text-slate-300">{label}</h3>
+                  <p className="mt-2 text-sm text-cyan-200">{signal.status.replaceAll("_", " ")}</p>
+                  <p className="mt-2 break-words text-xs leading-relaxed text-slate-400">{signal.explanation}</p>
+                </div>)}
+              </div>
+              <div className="mt-3 grid gap-3 text-xs text-slate-400 sm:grid-cols-2">
+                {([ ["Current", monitor.current], ["Reference", monitor.reference] ] as const).map(([label, window]) => <div key={label}>
+                  <p className="font-semibold text-slate-300">{label}: {window.samples} scores{window.truncated ? " (limit exceeded)" : ""}</p>
+                  <p>{new Date(window.start).toLocaleString("en-GB")} – {new Date(window.end).toLocaleString("en-GB")} (end excluded)</p>
+                  <p>Score bands 0–19 / 20–39 / 40–59 / 60–79 / 80–100: {window.histogram.join(" / ")}</p>
+                  <p>{window.cold_samples} sampled scores with fewer than five prior entity events</p>
+                </div>)}
+              </div>
+              <p className="mt-3 text-xs text-slate-400">Minimum {monitor.minimum_samples} scores per window · Change threshold {monitor.shift_threshold.toFixed(2)} · Total variation distance {monitor.distance === null ? "not assessed" : monitor.distance.toFixed(3)} · Last score {monitor.last_scored_at ? new Date(monitor.last_scored_at).toLocaleString("en-GB") : "none in comparison periods"}</p>
+            </>}
+          </section>
           <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               [metrics?.total_scores ?? 0, "events scored", Activity],

@@ -434,3 +434,18 @@ export type BehaviourEvaluationListResponse = {
   count: number;
   evaluations: BehaviourEvaluationRun[];
 };
+
+export type BehaviourHealthSignal = { status: string; explanation: string };
+export type BehaviourMonitorWindow = {
+  start: string; end: string; samples: number; histogram: number[];
+  cold_samples: number; truncated: boolean;
+};
+export type BehaviourMonitor = {
+  checked_at: string; model_version: string;
+  current: BehaviourMonitorWindow; reference: BehaviourMonitorWindow;
+  minimum_samples: number; shift_threshold: number; distance: number | null;
+  last_scored_at?: string;
+  distribution: BehaviourHealthSignal; baseline: BehaviourHealthSignal;
+  freshness: BehaviourHealthSignal; availability: BehaviourHealthSignal;
+  evaluation: BehaviourHealthSignal;
+};

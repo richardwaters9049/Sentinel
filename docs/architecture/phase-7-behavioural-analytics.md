@@ -228,6 +228,7 @@ Phase 7 now exposes:
 ```text
 GET   /api/v1/behaviour/scores
 GET   /api/v1/behaviour/metrics
+GET   /api/v1/behaviour/monitor
 GET   /api/v1/behaviour/settings
 PATCH /api/v1/behaviour/settings
 GET   /api/v1/behaviour/models
@@ -430,6 +431,61 @@ Historical baseline snapshots remain unchanged.
 
 ## Remaining Phase 7 work
 
-- add drift monitoring and baseline-health signals;
 - mature the behavioural catalogue;
 - add the Phase 7 final regression and completion gate.
+
+## Distribution monitoring and baseline health
+
+`GET /api/v1/behaviour/monitor` uses the same paired entity filters as scores and metrics.
+It returns independent signals, not an overall security verdict:
+
+- **Rolling context:** recent sampled scores with fewer than five prior entity events in their
+  persisted 24-hour baseline snapshot are labelled cold context. Five events is a context-depth
+  heuristic, not proof that the baseline is representative or that collection coverage is adequate.
+- **Scoring freshness:** latest persisted score for the selected model and scope within the
+  comparison periods is fresh through 15 minutes, stale afterwards. No scores in 48 hours is
+  reported explicitly. Sparse telemetry and pipeline failure cannot be distinguished by this signal.
+- **Analytics availability:** the existing live ML readiness dependency check is reported separately;
+  disabled, unknown and unavailable are distinct. A passing health check does not prove throughput.
+  Database failures return HTTP 503 with the normal sanitised API error shape.
+- **Observed distribution:** adjacent UTC scoring-time windows `[now-24h, now)` and
+  `[now-48h, now-24h)` compare score-band proportions for 0–19, 20–39, 40–59, 60–79, 80–100.
+  Total variation distance is half the sum of absolute differences in proportions, ranging from
+  zero to one. A distance of at least 0.20 prompts review. Floating-point noise at that boundary
+  is tolerated at 1e-12. Each window requires at least 30 scores. These are development defaults,
+  not calibrated statistical significance or operational drift guarantees.
+- **Synthetic evaluation:** latest non-empty evaluation matching the selected model and current
+  operational threshold is compared with recall >= 0.90 and false-positive rate <= 0.15.
+  Its dataset, threshold, metrics and timestamp are explained. Older than seven days is stale.
+  Missing matching runs are not evaluated. Synthetic results do not estimate production accuracy.
+
+The monitored model is the latest persisted scored model in the requested scope, selected
+with deterministic timestamp/event-ID ordering. It may differ from the registry's active model.
+Versions are never pooled. A new model needs sufficient samples in both windows. Historical
+thresholds and anomalous booleans are excluded from distribution comparison: changing policy
+alone cannot trigger a distribution-change signal. No anomaly-rate claim is used as drift proof.
+
+Each window reads at most 2,001 rows under a repeatable-read snapshot and a three-second
+query deadline. At most 2,000 are summarised; the extra row detects overflow and withholds
+comparison, rather than interpreting a biased recent sample as the entire window. Counts and
+cold-context counts then describe the capped sample. Migration 0015 adds query-pattern indexes.
+The API has a five-second context deadline; existing bounded readiness checks remain in use.
+
+Monitoring is calculated on demand. No monitoring records are persisted in this slice because
+there is no scheduled monitor or audit-history requirement yet. Historical scores, thresholds
+and baseline snapshots are preserved. This endpoint does not change the existing development
+actor trust boundary or add remediation actions. The console cancels stale scope requests,
+loads monitoring independently so its failure does not hide existing scores, and refreshes health
+when threshold policy changes.
+
+Limitations: score distributions can change with entity mix, telemetry composition, synthetic
+scenario activity, seasonality, replay timing or feature changes. Score-band comparison cannot
+identify which input feature changed and is not a model-performance test. Scoring timestamps
+avoid trusting producer clocks for monitoring windows but reflect replay/processing time.
+Thirty correlated events are not thirty independent observations. Cold context uses historical
+snapshot event counts, whose source timestamps still affect their coverage. Review these
+signals alongside explanations, deterministic findings and collection health.
+
+Verification includes monitor unit and API tests, optional PostgreSQL integration tests in a
+disposable schema (`SENTINEL_TEST_DATABASE_URL`), migration rerun checks, and monitoring
+contracts/entity isolation in the Phase Seven smoke test. Phase Seven remains in progress.

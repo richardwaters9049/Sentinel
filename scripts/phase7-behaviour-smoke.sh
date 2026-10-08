@@ -234,14 +234,23 @@ assert get("metrics",entity)["total_scores"]==metrics["total_scores"]
 assert get("scores",{**entity,"entity_type":"asset"})["count"]==0
 assert get("metrics",{**entity,"entity_type":"asset"})["total_scores"]==0
 assert get("scores",{"entity_type":"identity","entity_id":"phase7-nonexistent-entity"})["count"]==0
-for endpoint in ("scores","metrics"):
+for endpoint in ("scores","metrics","monitor"):
     for invalid in ({"entity_id":"test"},{"entity_type":"identity"},{"entity_type":"invalid","entity_id":"test"},{"entity_type":"identity","entity_id":"x"*257}):
         try:
             get(endpoint,invalid)
             raise AssertionError("invalid entity filter accepted")
         except HTTPError as error:
             assert error.code==400
-print("Entity scope, namespace separation, empty results and validation passed")
+monitor=get("monitor",entity)
+assert monitor["model_version"]==rolling["model_version"]
+assert monitor["current"]["samples"]>0
+assert monitor["availability"]["status"]=="available"
+assert monitor["minimum_samples"]==30
+assert monitor["shift_threshold"]==0.20
+assert len(monitor["current"]["histogram"])==5
+assert get("monitor",{**entity,"entity_type":"asset"})["current"]["samples"]==0
+assert get("monitor",{**entity,"entity_type":"asset"})["distribution"]["status"]=="insufficient_samples"
+print("Entity scope, monitoring, namespace separation, empty results and validation passed")
 PY
 
 echo "Verifying behavioural evidence propagation into findings and investigations..."

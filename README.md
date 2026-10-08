@@ -1150,7 +1150,8 @@ Raw event storage and normalised event storage may be separated later if volume 
 - Python ML service;
 - model evaluation;
 - analyst-visible explanations;
-- entity-scoped score exploration and matching metrics (identity, asset or collector).
+- entity-scoped score exploration and matching metrics (identity, asset or collector);
+- model-isolated score-distribution monitoring, cold-context and freshness signals, live analytics availability and matching synthetic evaluation health.
 
 ### Phase 8 — Platform hardening
 

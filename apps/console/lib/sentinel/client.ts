@@ -494,3 +494,13 @@ export async function listBehaviourEvaluations(
   );
   return readJSON<import("./types").BehaviourEvaluationListResponse>(response);
 }
+
+export async function getBehaviourMonitor(
+  signal?: AbortSignal, entity?: BehaviourEntityFilter,
+): Promise<import("./types").BehaviourMonitor> {
+  const query = new URLSearchParams(entity ?? {});
+  const response = await fetch(`/api/sentinel/api/v1/behaviour/monitor?${query}`, {
+    cache: "no-store", signal,
+  });
+  return readJSON<import("./types").BehaviourMonitor>(response);
+}
