@@ -496,6 +496,7 @@ export default function SentinelDashboard() {
                   </div>
                   <Button
                     render={<Link href="/findings" />}
+                    nativeButton={false}
                     variant="ghost"
                     size="sm"
                     className="cursor-pointer text-[0.7rem] text-sky-300 hover:bg-sky-400/10"
@@ -647,6 +648,7 @@ export default function SentinelDashboard() {
                   </div>
                   <Button
                     render={<Link href="/detections" />}
+                    nativeButton={false}
                     variant="ghost"
                     size="icon"
                     aria-label="Open detection management"
