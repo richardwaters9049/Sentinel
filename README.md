@@ -1159,7 +1159,8 @@ Raw event storage and normalised event storage may be separated later if volume 
 
 The initial [API authentication/RBAC slice](docs/architecture/phase-8-platform-hardening.md)
 is implemented with short-lived lab credentials, verified audit actors and local-only
-development compatibility. Interactive console sign-in remains outstanding.
+development compatibility. Interactive sign-in now uses bounded, revocable PostgreSQL
+sessions with HttpOnly cookies, origin checks and CSRF protection.
 
 - authentication;
 - RBAC;

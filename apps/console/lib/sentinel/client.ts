@@ -1,3 +1,4 @@
+import { sentinelFetch } from "./session";
 import type {
   AssetPivot,
   EventListResponse,
@@ -47,7 +48,7 @@ async function readJSON<T>(response: Response): Promise<T> {
 export async function listInvestigations(
   signal?: AbortSignal,
 ): Promise<InvestigationListResponse> {
-  const response = await fetch("/api/sentinel/api/v1/investigations?limit=50", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/investigations?limit=50", {
     cache: "no-store",
     signal,
   });
@@ -58,7 +59,7 @@ export async function getInvestigation(
   id: string,
   signal?: AbortSignal,
 ): Promise<InvestigationDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}`,
     {
       cache: "no-store",
@@ -69,7 +70,7 @@ export async function getInvestigation(
 }
 
 export async function listHunts(signal?: AbortSignal): Promise<HuntListResponse> {
-  const response = await fetch("/api/sentinel/api/v1/hunts", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/hunts", {
     cache: "no-store",
     signal,
   });
@@ -85,7 +86,7 @@ export async function createHunt(
   },
   actorID: string,
 ): Promise<HuntDefinition> {
-  const response = await fetch("/api/sentinel/api/v1/hunts", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/hunts", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -101,7 +102,7 @@ export async function runHunt(
   actorID: string,
   override: HuntQuery = {},
 ): Promise<HuntRunResult> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/hunts/${encodeURIComponent(id)}/run`,
     {
       method: "POST",
@@ -119,7 +120,7 @@ export async function listEvents(
   limit = 120,
   signal?: AbortSignal,
 ): Promise<EventListResponse> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/events?limit=${Math.min(Math.max(limit, 1), 200)}`,
     {
       cache: "no-store",
@@ -133,7 +134,7 @@ export async function listFindings(
   limit = 120,
   signal?: AbortSignal,
 ): Promise<FindingListResponse> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/findings?limit=${Math.min(Math.max(limit, 1), 200)}`,
     {
       cache: "no-store",
@@ -147,7 +148,7 @@ export async function getFinding(
   id: string,
   signal?: AbortSignal,
 ): Promise<FindingDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}`,
     {
       cache: "no-store",
@@ -162,7 +163,7 @@ export async function getFindingEvidence(
   contextMinutes = 5,
   signal?: AbortSignal,
 ): Promise<FindingEvidenceContext> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}/evidence?context_minutes=${Math.min(Math.max(contextMinutes, 0), 60)}`,
     {
       cache: "no-store",
@@ -177,7 +178,7 @@ export async function updateFindingStatus(
   status: FindingStatus,
   actorID: string,
 ): Promise<FindingDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/findings/${encodeURIComponent(id)}/status`,
     {
       method: "PATCH",
@@ -194,7 +195,7 @@ export async function updateFindingStatus(
 export async function listDetections(
   signal?: AbortSignal,
 ): Promise<DetectionListResponse> {
-  const response = await fetch("/api/sentinel/api/v1/detections", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/detections", {
     cache: "no-store",
     signal,
   });
@@ -204,7 +205,7 @@ export async function listDetections(
 export async function getDetectionMetrics(
   signal?: AbortSignal,
 ): Promise<DetectionMetricsResponse> {
-  const response = await fetch("/api/sentinel/api/v1/detections/metrics", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/detections/metrics", {
     cache: "no-store",
     signal,
   });
@@ -216,7 +217,7 @@ export async function setDetectionEnabled(
   enabled: boolean,
   actorID: string,
 ): Promise<DetectionRecord> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/detections/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
@@ -234,7 +235,7 @@ export async function setDetectionEnabled(
 export async function listIntelligenceIndicators(
   signal?: AbortSignal,
 ): Promise<IntelligenceIndicatorListResponse> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     "/api/sentinel/api/v1/intelligence/indicators?limit=100",
     {
       cache: "no-store",
@@ -248,7 +249,7 @@ export async function listIntelligenceIndicators(
 export async function listIntelligenceSources(
   signal?: AbortSignal,
 ): Promise<IntelligenceSourceListResponse> {
-  const response = await fetch("/api/sentinel/api/v1/intelligence/sources", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/intelligence/sources", {
     cache: "no-store",
     signal,
   });
@@ -260,7 +261,7 @@ export async function setIntelligenceSourceEnabled(
   enabled: boolean,
   actorID: string,
 ): Promise<IntelligenceSource> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/intelligence/sources/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
@@ -278,7 +279,7 @@ export async function listIntelligenceMatches(
   limit = 50,
   signal?: AbortSignal,
 ): Promise<IntelligenceMatchListResponse> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/intelligence/matches?limit=${Math.min(Math.max(limit, 1), 200)}`,
     {
       cache: "no-store",
@@ -291,7 +292,7 @@ export async function listIntelligenceMatches(
 export async function getIntelligenceMetrics(
   signal?: AbortSignal,
 ): Promise<IntelligenceMetrics> {
-  const response = await fetch("/api/sentinel/api/v1/intelligence/metrics", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/intelligence/metrics", {
     cache: "no-store",
     signal,
   });
@@ -303,7 +304,7 @@ export async function getAssetPivot(
   limit = 50,
   signal?: AbortSignal,
 ): Promise<AssetPivot> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/assets/${encodeURIComponent(id)}/pivot?limit=${Math.min(Math.max(limit, 1), 200)}`,
     {
       cache: "no-store",
@@ -324,7 +325,7 @@ export async function createInvestigation(
   },
   actorID: string,
 ): Promise<InvestigationDetail> {
-  const response = await fetch("/api/sentinel/api/v1/investigations", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/investigations", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -340,7 +341,7 @@ export async function attachHuntRunToInvestigation(
   runID: number,
   actorID: string,
 ): Promise<InvestigationDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/investigations/${encodeURIComponent(investigationID)}/hunt-runs/${runID}`,
     {
       method: "POST",
@@ -360,7 +361,7 @@ export async function updateInvestigationMetadata(
   },
   actorID: string,
 ): Promise<InvestigationDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
@@ -379,7 +380,7 @@ export async function updateInvestigationStatus(
   status: "open" | "investigating" | "contained" | "closed",
   actorID: string,
 ): Promise<InvestigationDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}/status`,
     {
       method: "PATCH",
@@ -398,7 +399,7 @@ export async function addInvestigationNote(
   body: string,
   actorID: string,
 ): Promise<InvestigationDetail> {
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/investigations/${encodeURIComponent(id)}/notes`,
     {
       method: "POST",
@@ -423,7 +424,7 @@ export async function getBehaviourMetrics(
   entity?: BehaviourEntityFilter,
 ): Promise<BehaviourMetrics> {
   const query = new URLSearchParams(entity ?? {});
-  const response = await fetch(`/api/sentinel/api/v1/behaviour/metrics?${query}`, {
+  const response = await sentinelFetch(`/api/sentinel/api/v1/behaviour/metrics?${query}`, {
     cache: "no-store",
     signal,
   });
@@ -439,7 +440,7 @@ export async function listBehaviourScores(
     ...entity,
     limit: String(Math.min(Math.max(limit, 1), 200)),
   });
-  const response = await fetch(
+  const response = await sentinelFetch(
     `/api/sentinel/api/v1/behaviour/scores?${query}`,
     {
       cache: "no-store",
@@ -452,7 +453,7 @@ export async function listBehaviourScores(
 export async function getBehaviourSettings(
   signal?: AbortSignal,
 ): Promise<import("./types").BehaviourSettings> {
-  const response = await fetch("/api/sentinel/api/v1/behaviour/settings", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/behaviour/settings", {
     cache: "no-store",
     signal,
   });
@@ -462,7 +463,7 @@ export async function getBehaviourSettings(
 export async function updateBehaviourSettings(
   anomalyThreshold: number,
 ): Promise<import("./types").BehaviourSettings> {
-  const response = await fetch("/api/sentinel/api/v1/behaviour/settings", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/behaviour/settings", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -476,7 +477,7 @@ export async function updateBehaviourSettings(
 export async function listBehaviourModels(
   signal?: AbortSignal,
 ): Promise<import("./types").BehaviourModelListResponse> {
-  const response = await fetch("/api/sentinel/api/v1/behaviour/models", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/behaviour/models", {
     cache: "no-store",
     signal,
   });
@@ -488,7 +489,7 @@ export async function listBehaviourEvaluations(
   signal?: AbortSignal,
 ): Promise<import("./types").BehaviourEvaluationListResponse> {
   const bounded = Math.min(Math.max(limit, 1), 100);
-  const response = await fetch(
+  const response = await sentinelFetch(
     "/api/sentinel/api/v1/behaviour/evaluations?limit=" + String(bounded),
     { cache: "no-store", signal },
   );
@@ -499,7 +500,7 @@ export async function getBehaviourMonitor(
   signal?: AbortSignal, entity?: BehaviourEntityFilter,
 ): Promise<import("./types").BehaviourMonitor> {
   const query = new URLSearchParams(entity ?? {});
-  const response = await fetch(`/api/sentinel/api/v1/behaviour/monitor?${query}`, {
+  const response = await sentinelFetch(`/api/sentinel/api/v1/behaviour/monitor?${query}`, {
     cache: "no-store", signal,
   });
   return readJSON<import("./types").BehaviourMonitor>(response);
@@ -508,7 +509,7 @@ export async function getBehaviourMonitor(
 export async function getBehaviourCatalogue(
   signal?: AbortSignal,
 ): Promise<import("./types").BehaviourCatalogue> {
-  const response = await fetch("/api/sentinel/api/v1/behaviour/catalogue", {
+  const response = await sentinelFetch("/api/sentinel/api/v1/behaviour/catalogue", {
     cache: "no-store",
     signal,
   });

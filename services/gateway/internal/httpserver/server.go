@@ -85,15 +85,18 @@ type AnalystStore interface {
 }
 
 type Server struct {
-	access      *access.Verifier
-	auditLogger *slog.Logger
-	policies    map[string][]string
-	mux         *http.ServeMux
-	readiness   *readiness.Checker
-	ingestor    TelemetryIngestor
-	events      EventReader
-	analyst     AnalystStore
-	catalogue   BehaviourCatalogueReader
+	sessions      access.SessionStore
+	consoleOrigin string
+	sessionCookie string
+	access        *access.Verifier
+	auditLogger   *slog.Logger
+	policies      map[string][]string
+	mux           *http.ServeMux
+	readiness     *readiness.Checker
+	ingestor      TelemetryIngestor
+	events        EventReader
+	analyst       AnalystStore
+	catalogue     BehaviourCatalogueReader
 }
 
 func New(
@@ -130,6 +133,8 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) routes() {
+	s.register("POST /api/v1/auth/login", s.handleLogin)
+	s.register("POST /api/v1/auth/logout", s.handleLogout, access.Analyst, access.Administrator)
 	s.register("GET /api/v1/session", s.handleSession, access.Analyst, access.Administrator, access.Collector)
 	s.register("/health", method(http.MethodGet, s.handleHealth))
 	s.register("/ready", method(http.MethodGet, s.handleReady))

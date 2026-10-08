@@ -97,8 +97,11 @@ Implemented in required authentication mode:
 - collector, analyst and administrator separation;
 - authenticated actor attribution in domain audits and structured access-decision logs.
 
-Residual risks: interactive user sign-in, online revocation and durable access-log
-retention are outstanding. Development compatibility trusts loopback callers, including
+Interactive sign-in now uses hashed PostgreSQL sessions, bounded absolute/idle expiry,
+login rotation, logout revocation, HttpOnly/SameSite cookies and exact-origin/CSRF checks.
+
+Residual risks: federation/MFA, immediate credential-registry revocation and durable
+access-log retention are outstanding. Development compatibility trusts loopback callers, including
 local proxies. Manifest/host operators remain trusted. These controls do not establish
 signed event-source provenance or per-investigation ownership enforcement.
 See [ADR 0005](../adr/0005-api-authentication.md).

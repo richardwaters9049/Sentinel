@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +25,7 @@ const (
 )
 
 type Config struct {
+	ConsoleOrigin     string
 	Access            *access.Verifier
 	AuthMode          string
 	Environment       string
@@ -51,6 +54,14 @@ func Load() (Config, error) {
 		ReadHeaderTimeout: getDurationEnv("SENTINEL_READ_HEADER_TIMEOUT", defaultReadHeaderTimeout),
 	}
 
+	cfg.ConsoleOrigin = getEnv("SENTINEL_CONSOLE_ORIGIN", "http://127.0.0.1:3000")
+	origin, err := url.Parse(cfg.ConsoleOrigin)
+	if err != nil || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" || (origin.Scheme != "http" && origin.Scheme != "https") {
+		return Config{}, fmt.Errorf("SENTINEL_CONSOLE_ORIGIN must be an exact HTTP(S) origin")
+	}
+	if origin.Scheme == "http" && origin.Hostname() != "localhost" && (net.ParseIP(origin.Hostname()) == nil || !net.ParseIP(origin.Hostname()).IsLoopback()) {
+		return Config{}, fmt.Errorf("non-local console sessions require an HTTPS origin")
+	}
 	cfg.AuthMode = getEnv("SENTINEL_AUTH_MODE", "required")
 	if os.Getenv("SENTINEL_AUTH_MODE") == "" && cfg.Environment == "development" {
 		cfg.AuthMode = "development"

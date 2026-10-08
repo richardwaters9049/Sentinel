@@ -78,7 +78,7 @@ done
 echo "Starting production-built analyst console..."
 (
   cd apps/console
-  SENTINEL_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"     bun run start -- -p "${CONSOLE_PORT}"
+  SENTINEL_CONSOLE_AUTH_MODE=development SENTINEL_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"     bun run start -- -p "${CONSOLE_PORT}"
 ) >/tmp/sentinel-phase4-console.log 2>&1 &
 CONSOLE_PID=$!
 

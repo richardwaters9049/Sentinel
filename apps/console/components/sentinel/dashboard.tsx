@@ -23,6 +23,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { SessionControl } from "@/components/sentinel/session-provider";
+
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +146,7 @@ export function SidebarContent() {
           Defensive simulation
         </div>
       </div>
+      <SessionControl />
     </div>
   );
 }

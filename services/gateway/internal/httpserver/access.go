@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -38,6 +39,10 @@ func (s *Server) authorise(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/login" {
+			s.handleLogin(w, r)
+			return
+		}
 		if s.access == nil {
 			// Forwarded headers never make a remote client a trusted local developer.
 			host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -53,12 +58,25 @@ func (s *Server) authorise(next http.Handler) http.Handler {
 		headers := r.Header.Values("Authorization")
 		var principal access.Principal
 		var err error
-		if len(headers) == 1 {
+		cookies := r.CookiesNamed(s.sessionCookie)
+		if len(headers) == 1 && len(cookies) == 0 {
 			principal, err = s.access.Authenticate(headers[0], time.Now().UTC())
+		} else if len(headers) == 0 && len(cookies) == 1 {
+			principal, r, err = s.cookiePrincipal(r)
 		} else {
 			err = access.ErrUnauthenticated
 		}
+
 		if err != nil {
+			if errors.Is(err, errCSRF) {
+				s.logAccess(r, pattern, access.Principal{}, "csrf_rejected", 403)
+				writeAPIError(w, 403, "csrf_rejected", "session mutation requires a valid origin and CSRF token")
+				return
+			}
+			if !errors.Is(err, access.ErrUnauthenticated) && !errors.Is(err, access.ErrSessionNotFound) {
+				writeAPIError(w, 503, "session_unavailable", "session verification is unavailable")
+				return
+			}
 			s.logAccess(r, pattern, access.Principal{}, "unauthenticated", http.StatusUnauthorized)
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeAPIError(w, http.StatusUnauthorized, "unauthenticated", "valid bearer credential required")
@@ -105,6 +123,10 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	principal, ok := r.Context().Value(principalKey{}).(access.Principal)
 	if !ok {
 		writeAPIError(w, http.StatusUnauthorized, "authentication_disabled", "development mode has no authenticated session")
+		return
+	}
+	if session, ok := r.Context().Value(sessionKey{}).(sessionContext); ok {
+		writeJSON(w, 200, map[string]interface{}{"subject": principal.Subject, "role": principal.Role, "expires_at": session.ExpiresAt, "csrf_token": access.CSRFToken(session.ID)})
 		return
 	}
 	writeJSON(w, http.StatusOK, principal)

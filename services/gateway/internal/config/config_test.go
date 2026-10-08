@@ -93,3 +93,14 @@ func TestAuthenticationConfigFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestConsoleOriginValidation(t *testing.T) {
+	for _, origin := range []string{"http://public.example", "https://console.example/path", "https://user:secret@console.example", "https://console.example?x=1", "null"} {
+		t.Run(origin, func(t *testing.T) {
+			t.Setenv("SENTINEL_CONSOLE_ORIGIN", origin)
+			if _, err := Load(); err == nil {
+				t.Fatal("invalid session origin accepted")
+			}
+		})
+	}
+}

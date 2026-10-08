@@ -111,7 +111,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).WithAccess(cfg.Access, logger).Handler(),
+		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).WithAccess(cfg.Access, logger).WithSessions(db, cfg.ConsoleOrigin).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
