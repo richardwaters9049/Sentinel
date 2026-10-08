@@ -38,3 +38,16 @@ def test_score_contract() -> None:
     assert payload["model_kind"] == "IsolationForest"
     assert payload["threshold"] == 65
     assert isinstance(payload["explanations"], list)
+
+
+def test_catalogue_includes_versioned_profiles_and_coverage() -> None:
+    response = client.get("/v1/catalogue")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["catalogue_version"] == "sentinel-behaviour-catalogue-v1"
+    assert len(payload["profiles"]) == 5
+    assert payload["validation"]["threshold"] == 65
+    assert payload["validation"]["model_version"] == payload["model_version"]
+    assert {profile["id"] for profile in payload["profiles"]} == {
+        entry["profile_id"] for entry in payload["validation"]["profiles"]
+    }

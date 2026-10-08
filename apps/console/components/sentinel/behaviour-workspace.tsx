@@ -14,6 +14,7 @@ import {
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
+import BehaviourCataloguePanel from "@/components/sentinel/behaviour-catalogue";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -286,6 +287,8 @@ export default function BehaviourWorkspace() {
             })}
           </section>
 
+
+          <BehaviourCataloguePanel revision={revision} selected={selected} threshold={settings?.anomaly_threshold} />
 
           <section className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
             <Card className="overflow-hidden rounded-[1.4rem] border border-violet-400/15 bg-gradient-to-br from-violet-400/[0.06] via-[#0c1119] to-cyan-400/[0.03] py-0">

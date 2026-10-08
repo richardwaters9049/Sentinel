@@ -1,4 +1,4 @@
-.PHONY: help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7
+.PHONY: ml-catalogue-evaluate help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7
 
 help:
 	@echo "Sentinel development commands"
@@ -15,6 +15,7 @@ help:
 	@echo "  make console-build    Build the analyst console"
 	@echo "  make ml-test          Run Python behavioural analytics tests"
 	@echo "  make ml-evaluate      Evaluate the synthetic behavioural model"
+	@echo "  make ml-catalogue-evaluate Evaluate per-profile synthetic coverage"
 	@echo "  make record-phase7-evaluation Persist a governed Phase 7 evaluation run"
 	@echo "  make test             Run all current tests"
 	@echo "  make fmt              Format Go code"
@@ -155,3 +156,7 @@ ml-evaluate:
 
 record-phase7-evaluation:
 	./scripts/phase7-evaluate-record.sh
+
+ml-catalogue-evaluate:
+	docker compose build ml
+	docker compose run --rm ml python -m app.catalogue_evaluation

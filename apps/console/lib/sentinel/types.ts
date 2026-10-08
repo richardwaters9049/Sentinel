@@ -449,3 +449,43 @@ export type BehaviourMonitor = {
   freshness: BehaviourHealthSignal; availability: BehaviourHealthSignal;
   evaluation: BehaviourHealthSignal;
 };
+
+export type BehaviourProfile = {
+  id: string;
+  title: string;
+  description: string;
+  features: string[];
+  required_telemetry: string[];
+  context_window: string;
+  minimum_prior_events: number;
+  limitations: string[];
+  analyst_actions: string[];
+};
+
+export type BehaviourProfileValidation = {
+  profile_id: string;
+  reference_count: number;
+  changed_count: number;
+  reference_flagged: number;
+  changed_flagged: number;
+  reference_flag_rate: number;
+  changed_flag_rate: number;
+  reference_mean_score: number;
+  changed_mean_score: number;
+  changed_explanation_features: string[];
+  interpretation: string;
+};
+
+export type BehaviourCatalogue = {
+  catalogue_version: string;
+  model_version: string;
+  dataset_name: string;
+  profiles: BehaviourProfile[];
+  validation: {
+    catalogue_version: string;
+    model_version: string;
+    dataset_name: string;
+    threshold: number;
+    profiles: BehaviourProfileValidation[];
+  };
+};

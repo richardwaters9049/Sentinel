@@ -504,3 +504,13 @@ export async function getBehaviourMonitor(
   });
   return readJSON<import("./types").BehaviourMonitor>(response);
 }
+
+export async function getBehaviourCatalogue(
+  signal?: AbortSignal,
+): Promise<import("./types").BehaviourCatalogue> {
+  const response = await fetch("/api/sentinel/api/v1/behaviour/catalogue", {
+    cache: "no-store",
+    signal,
+  });
+  return readJSON<import("./types").BehaviourCatalogue>(response);
+}

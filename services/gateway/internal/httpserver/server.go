@@ -40,6 +40,10 @@ type BehaviourStore interface {
 	ListBehaviourEvaluationRuns(context.Context, int) ([]database.BehaviourEvaluationRun, error)
 }
 
+type BehaviourCatalogueReader interface {
+	Catalogue(context.Context) (behaviour.Catalogue, error)
+}
+
 type IntelligenceStore interface {
 	ListIntelligenceIndicators(context.Context, database.IntelligenceIndicatorQuery) ([]enrichment.Indicator, error)
 	ListIntelligenceSources(context.Context) ([]database.ThreatIntelSourceRecord, error)
@@ -84,6 +88,7 @@ type Server struct {
 	ingestor  TelemetryIngestor
 	events    EventReader
 	analyst   AnalystStore
+	catalogue BehaviourCatalogueReader
 }
 
 func New(
@@ -92,7 +97,18 @@ func New(
 	events EventReader,
 	analyst AnalystStore,
 ) *Server {
+	return NewWithBehaviourCatalogue(readinessChecker, ingestor, events, analyst, nil)
+}
+
+func NewWithBehaviourCatalogue(
+	readinessChecker *readiness.Checker,
+	ingestor TelemetryIngestor,
+	events EventReader,
+	analyst AnalystStore,
+	catalogue BehaviourCatalogueReader,
+) *Server {
 	s := &Server{
+		catalogue: catalogue,
 		mux:       http.NewServeMux(),
 		readiness: readinessChecker,
 		ingestor:  ingestor,
@@ -124,6 +140,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches)
 	s.mux.HandleFunc("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics)
 	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
+	s.mux.HandleFunc("GET /api/v1/behaviour/catalogue", s.handleBehaviourCatalogue)
 	s.mux.HandleFunc("GET /api/v1/behaviour/scores", s.handleBehaviourScores)
 	s.mux.HandleFunc("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics)
 	s.mux.HandleFunc("GET /api/v1/behaviour/monitor", s.handleBehaviourMonitor)
@@ -1027,4 +1044,27 @@ func (s *Server) handleBehaviourMonitor(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	writeJSON(w, http.StatusOK, monitor)
+}
+
+func (s *Server) handleBehaviourCatalogue(w http.ResponseWriter, r *http.Request) {
+	if len(r.URL.Query()) != 0 {
+		writeAPIError(w, http.StatusBadRequest, "invalid_query", "the catalogue is model-wide and accepts no filters")
+		return
+	}
+	if s.catalogue == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "behaviour_unavailable", "behavioural catalogue is unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	catalogue, err := s.catalogue.Catalogue(ctx)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "dependency_unavailable", "behavioural catalogue could not be loaded")
+		return
+	}
+	if err := catalogue.Validate(); err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "invalid_dependency_response", "behavioural catalogue could not be loaded")
+		return
+	}
+	writeJSON(w, http.StatusOK, catalogue)
 }

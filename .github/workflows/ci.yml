@@ -80,6 +80,10 @@ jobs:
         working-directory: services/ml
         run: python -m app.evaluation
 
+      - name: Report per-profile synthetic coverage
+        working-directory: services/ml
+        run: python -m app.catalogue_evaluation
+
   console:
     name: Analyst console checks
     runs-on: ubuntu-latest
@@ -100,6 +104,10 @@ jobs:
       - name: Lint analyst console
         working-directory: apps/console
         run: bun run lint
+
+      - name: Test analyst API clients
+        working-directory: apps/console
+        run: bun test lib/sentinel/client-monitor.test.ts lib/sentinel/client-catalogue.test.ts
 
       - name: Build analyst console
         working-directory: apps/console

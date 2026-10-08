@@ -1151,7 +1151,8 @@ Raw event storage and normalised event storage may be separated later if volume 
 - model evaluation;
 - analyst-visible explanations;
 - entity-scoped score exploration and matching metrics (identity, asset or collector);
-- model-isolated score-distribution monitoring, cold-context and freshness signals, live analytics availability and matching synthetic evaluation health.
+- model-isolated score-distribution monitoring, cold-context and freshness signals, live analytics availability and matching synthetic evaluation health;
+- five versioned behavioural profiles with per-profile synthetic coverage, known limitations and analyst review guidance.
 
 ### Phase 8 — Platform hardening
 

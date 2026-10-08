@@ -33,3 +33,25 @@ The service returns:
 - top feature deviations with analyst-readable explanations.
 
 The output is evidence, not a security verdict.
+
+## Behavioural catalogue
+
+`GET /v1/catalogue` returns five versioned analytical profiles, their telemetry requirements,
+context-depth guidance, limitations and analyst review steps. The gateway exposes this through
+`GET /api/v1/behaviour/catalogue`; the Behaviour workspace shows expandable profile panels
+and links matching-model explanation features.
+
+The catalogue includes a deterministic per-profile report computed once at startup from the
+existing model, at fixed threshold 65. It uses twelve reference and twelve changed-context
+cases per profile, with March fixtures separate from training and the original evaluation.
+The original model version and persisted evaluation history remain unchanged.
+
+From `/Users/richy/Documents/Github/Sentinel`, run `make ml-catalogue-evaluate` to inspect
+per-profile score sensitivity. After building the image, an alternative policy can be measured
+with `docker compose run --rm -e SENTINEL_BEHAVIOUR_THRESHOLD=71 ml python -m app.catalogue_evaluation`.
+
+Timing, activity bursts and destination diversity alone do not cross threshold 65 in these
+fixtures. Failure concentration and combined simulated OT context do. These are small
+synthetic sensitivity measurements, not production recall or compromise probabilities.
+See the [Phase Seven architecture](../../docs/architecture/phase-7-behavioural-analytics.md#behavioural-catalogue-maturity)
+for interpretation and remaining limitations.

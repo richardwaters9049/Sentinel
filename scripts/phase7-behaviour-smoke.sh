@@ -104,6 +104,31 @@ assert any(
 ), models
 PY
 
+echo "Verifying versioned behavioural catalogue and per-profile coverage..."
+curl -fsS "${BASE}/behaviour/catalogue" >/tmp/sentinel-phase7-catalogue.json
+python3 - <<'PYTEST'
+import json
+catalogue=json.load(open("/tmp/sentinel-phase7-catalogue.json"))
+assert catalogue["catalogue_version"]=="sentinel-behaviour-catalogue-v1"
+assert catalogue["model_version"]=="sentinel-behaviour-iforest-v1"
+profiles={profile["id"]:profile for profile in catalogue["profiles"]}
+assert set(profiles)=={"BA-001","BA-002","BA-003","BA-004","BA-005"}
+validation=catalogue["validation"]
+assert validation["threshold"]==65  # Fixed catalogue reference, independent of the live threshold 71.
+assert validation["model_version"]==catalogue["model_version"]
+for case in validation["profiles"]:
+    profile=profiles[case["profile_id"]]
+    assert profile["required_telemetry"] and profile["limitations"] and profile["analyst_actions"]
+    assert case["reference_count"]==case["changed_count"]==12
+    assert case["reference_flagged"]==0
+    assert case["changed_mean_score"]>case["reference_mean_score"]
+    assert set(profile["features"]) & set(case["changed_explanation_features"])
+    if case["profile_id"] in {"BA-001","BA-003","BA-004"}:
+        assert case["changed_flagged"]==0  # Keep weak isolated coverage visible.
+    else:
+        assert case["changed_flagged"]==12
+PYTEST
+
 echo "Submitting baseline-like behaviour..."
 "${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-normal   -delay 0s >/tmp/sentinel-phase7-normal.log
 
@@ -342,6 +367,7 @@ echo "Phase 7 behavioural-analytics smoke test passed."
 echo "  Python ML service health: verified"
 echo "  deterministic Isolation Forest model: verified"
 echo "  model registry provenance: verified"
+echo "  versioned catalogue and per-profile limitations: verified"
 echo "  governed threshold control: verified"
 echo "  persisted evaluation history: verified"
 echo "  baseline-like activity: verified"

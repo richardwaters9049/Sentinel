@@ -226,6 +226,7 @@ This keeps the first runtime slice deterministic while leaving room for richer e
 Phase 7 now exposes:
 
 ```text
+GET   /api/v1/behaviour/catalogue
 GET   /api/v1/behaviour/scores
 GET   /api/v1/behaviour/metrics
 GET   /api/v1/behaviour/monitor
@@ -431,7 +432,6 @@ Historical baseline snapshots remain unchanged.
 
 ## Remaining Phase 7 work
 
-- mature the behavioural catalogue;
 - add the Phase 7 final regression and completion gate.
 
 ## Distribution monitoring and baseline health
@@ -489,3 +489,68 @@ signals alongside explanations, deterministic findings and collection health.
 Verification includes monitor unit and API tests, optional PostgreSQL integration tests in a
 disposable schema (`SENTINEL_TEST_DATABASE_URL`), migration rerun checks, and monitoring
 contracts/entity isolation in the Phase Seven smoke test. Phase Seven remains in progress.
+
+## Behavioural catalogue maturity
+
+`GET /api/v1/behaviour/catalogue` proxies repository-owned ML profile metadata and
+per-profile synthetic validation. It is model-wide and rejects query filters with HTTP 400.
+ML being disabled, unavailable or returning an invalid catalogue produces a sanitised HTTP 503.
+The gateway caps upstream responses at 1 MiB, applies a three-second context deadline, bounds
+profile counts and text lengths, rejects duplicate IDs, and verifies validation provenance,
+count/rate consistency and finite metrics before exposing them to the console.
+
+Catalogue version: `sentinel-behaviour-catalogue-v1`.
+Dataset: `synthetic-behaviour-catalogue-v1`.
+Model: `sentinel-behaviour-iforest-v1` (unchanged training and inference).
+
+| ID | Profile | Features/context | Suggested prior events |
+| --- | --- | --- | --- |
+| BA-001 | Unusual activity timing | UTC cyclic hour and weekend; current event | 0 |
+| BA-002 | Authentication failure concentration | Failure indicator and failures / all entity events in 60 minutes | 5 in 60 minutes |
+| BA-003 | Entity activity burst | Prior entity event count in 60 minutes, capped at 60 for the model feature | 5 in 60 minutes |
+| BA-004 | Destination diversity | Distinct destination IPs / prior entity events in 24 hours | 5 in 24 hours |
+| BA-005 | Simulated enterprise-to-OT context | Cross-zone, service account, OT indicator and prior OT proportion in 24 hours | 5 in 24 hours |
+
+These are analytical profiles, not new detection rules, causal attributions, MITRE mappings or
+findings. The suggested context depths guide review and do not change scoring eligibility.
+The catalogue links a selected score only when its model version matches and a profile shares
+features with its persisted top explanations. This is a feature link, not a rule match; absence
+from the top three explanations does not establish absence of that behaviour.
+
+Each profile has twelve reference-like and twelve changed-context synthetic cases, dated in
+March 2026, separate from January training and the existing February validation dataset.
+Reference cases are reused across profiles, so totals do not represent independent observations.
+Changed-context labels mean feature changes, not maliciousness. Activity-burst cases also
+adjust total counts and derived destination ratios to keep context internally consistent.
+The OT cohort combines features and does not measure each feature's independent contribution.
+
+The API computes this deterministic validation report once at ML service startup using its
+existing model instance and a fixed threshold of 65. It reports counts flagged, flag rates,
+mean scores and explanation-feature coverage. It is not persisted evaluation history and does
+not replace the governed evaluation workflow. Operational threshold changes do not alter this
+reference report; the console explicitly shows policy differences. Other thresholds can be
+examined with `make ml-catalogue-evaluate` and `SENTINEL_BEHAVIOUR_THRESHOLD` passed into
+the evaluator container, without changing the model.
+
+At threshold 65 in the pinned runtime:
+
+- BA-001, BA-003 and BA-004: 0/12 changed-context cases flagged, despite higher mean scores
+  and relevant explanations. Isolated coverage remains limited; the console shows this warning.
+- BA-002 and BA-005: 12/12 changed-context cases flagged.
+- All five reference cohorts: 0/12 cases flagged.
+
+These measurements describe tiny synthetic cohorts only. The existing aggregate recall and
+false-positive guardrails remain scoped to their original dataset and cannot be generalised
+from these results. Known limitations include shift work, maintenance, source-clock errors,
+collection/replay bursts, missing destination fields, small denominators and the
+enterprise-dominant reference scoring authorised OT activity highly.
+
+No model retraining, historical score mutation, remediation, database migration or new
+runtime dependency is introduced. The trust boundary remains gateway-to-configured ML
+service with bounded, validated metadata. The catalogue's native expandable panels support
+keyboard interaction and introduce no decorative motion. Tests cover malformed/oversized
+responses, invalid provenance and metrics, cancellation, disabled services, fixed-threshold
+separation, deterministic contrast cases and the model-wide proxy contract.
+
+The remaining Phase Seven gate must assess these limitations explicitly before declaring
+completion. Catalogue maturity does not mean all profiles have reliable detection coverage.

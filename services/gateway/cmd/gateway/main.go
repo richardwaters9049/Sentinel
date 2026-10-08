@@ -106,7 +106,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.New(readinessChecker, telemetryService, db, db).Handler(),
+		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
