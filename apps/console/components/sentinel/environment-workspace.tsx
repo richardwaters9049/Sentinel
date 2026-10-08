@@ -28,6 +28,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
+import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -653,9 +654,7 @@ export default function EnvironmentWorkspace() {
             <div className="min-w-0">
               <div className="flex items-center gap-3">
                 <SidebarDrawer />
-                <span className="text-[0.72rem] font-bold tracking-[0.15em] text-slate-500">
-                  SENTINEL
-                </span>
+                <SentinelBrand />
               </div>
 
               <div className="mt-3 flex items-center gap-2 text-[0.67rem] font-semibold tracking-[0.13em] text-cyan-300/70">

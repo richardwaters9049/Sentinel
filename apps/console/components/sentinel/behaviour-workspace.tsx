@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
 import BehaviourCataloguePanel from "@/components/sentinel/behaviour-catalogue";
+import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -180,9 +181,7 @@ export default function BehaviourWorkspace() {
             <div>
               <div className="flex items-center gap-3">
                 <SidebarDrawer />
-                <span className="text-[0.72rem] font-bold tracking-[0.15em] text-slate-500">
-                  SENTINEL
-                </span>
+                <SentinelBrand />
               </div>
               <div className="mt-3 flex items-center gap-2 text-[0.67rem] font-semibold tracking-[0.13em] text-cyan-300/75">
                 <BrainCircuit className="size-3.5" />

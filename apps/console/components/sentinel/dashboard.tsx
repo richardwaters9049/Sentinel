@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 
 import { SessionControl } from "@/components/sentinel/session-provider";
 
+import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -83,20 +84,8 @@ export function SidebarContent() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-7 flex items-center gap-3">
-        <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-sky-400 via-cyan-300 to-violet-500 shadow-[0_0_40px_rgba(56,189,248,0.18)]">
-          <ShieldCheck className="size-5 text-slate-950" />
-        </div>
-        <div>
-          <div className="text-[0.98rem] font-bold tracking-[0.12em] text-white">
-            SENTINEL
-          </div>
-          <div className="mt-0.5 text-[0.62rem] font-semibold tracking-[0.15em] text-slate-600">
-            ANALYST CONSOLE
-          </div>
-        </div>
-      </div>
+    <div className="flex min-h-full flex-col">
+      <SentinelBrand variant="sidebar" className="mb-7 mt-8 pr-5" />
 
       <div className="mb-3 text-[0.64rem] font-semibold tracking-[0.15em] text-slate-600">
         DEFENSIVE OPERATIONS
@@ -369,9 +358,7 @@ export default function SentinelDashboard() {
             <div>
               <div className="flex items-center gap-3">
                 <SidebarDrawer />
-                <span className="text-[0.72rem] font-bold tracking-[0.15em] text-slate-500">
-                  SENTINEL
-                </span>
+                <SentinelBrand />
               </div>
               <h1 className="mt-3 text-[1.65rem] font-bold leading-[1.18] tracking-[-0.03em] text-white sm:text-[1.9rem]">
                 Security overview

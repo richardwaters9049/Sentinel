@@ -1,5 +1,7 @@
 # Sentinel
 
+<img src="apps/console/public/brand/sentinel-logo.svg" width="96" height="96" alt="Sentinel detection-lens logo" />
+
 **A defensive threat-hunting, detection-engineering and security-analytics platform for simulated critical-infrastructure environments.**
 
 Sentinel models a fictional Northstar Energy facility, bringing enterprise IT and operational-technology telemetry into one analyst workflow. It turns synthetic events into explainable findings, supports hypothesis-driven hunts, and preserves evidence in investigation timelines.
@@ -48,3 +50,7 @@ All demonstrations use synthetic telemetry, fictional assets and controlled simu
 Created by **Richard Waters**, a Senior Software Engineer focused on secure systems and defensive security platforms.
 
 No licence has been selected; broad reuse rights are not granted.
+
+## Brand identity
+
+The console uses Sentinel’s detection-lens logo across sign-in, navigation and workspace headers. See [brand assets and usage](docs/design/sentinel-brand.md).

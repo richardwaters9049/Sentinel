@@ -43,7 +43,7 @@ export default function SidebarDrawer({
           Primary navigation for the Sentinel analyst console.
         </DrawerDescription>
 
-        <div className="relative h-dvh px-5 py-6">
+        <div className="relative h-dvh overflow-y-auto overscroll-contain px-5 py-6">
           <DrawerClose
             render={
               <Button
