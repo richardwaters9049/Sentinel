@@ -31,8 +31,8 @@ type EventReader interface {
 
 type BehaviourStore interface {
 	GetEventBehaviourScore(context.Context, string) (behaviour.Score, error)
-	ListBehaviourScores(context.Context, int) ([]behaviour.Score, error)
-	BehaviourMetrics(context.Context) (database.BehaviourMetrics, error)
+	ListBehaviourScores(context.Context, database.BehaviourQuery) ([]behaviour.Score, error)
+	BehaviourMetrics(context.Context, database.BehaviourQuery) (database.BehaviourMetrics, error)
 	GetBehaviourSettings(context.Context) (behaviour.Settings, error)
 	UpdateBehaviourSettings(context.Context, int, string) (behaviour.Settings, error)
 	ListBehaviourModels(context.Context) ([]database.BehaviourModelRecord, error)
@@ -250,6 +250,14 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func behaviourQuery(r *http.Request) (database.BehaviourQuery, error) {
+	query := database.BehaviourQuery{
+		EntityID:   strings.TrimSpace(r.URL.Query().Get("entity_id")),
+		EntityType: strings.TrimSpace(r.URL.Query().Get("entity_type")),
+	}
+	return query, query.Validate()
+}
+
 func (s *Server) handleBehaviourScores(w http.ResponseWriter, r *http.Request) {
 	store, ok := s.analyst.(BehaviourStore)
 	if !ok || store == nil {
@@ -267,7 +275,13 @@ func (s *Server) handleBehaviourScores(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
-	scores, err := store.ListBehaviourScores(r.Context(), limit)
+	query, err := behaviourQuery(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_entity", err.Error())
+		return
+	}
+	query.Limit = limit
+	scores, err := store.ListBehaviourScores(r.Context(), query)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behavioural scores could not be queried")
 		return
@@ -286,7 +300,12 @@ func (s *Server) handleBehaviourMetrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	metrics, err := store.BehaviourMetrics(r.Context())
+	query, err := behaviourQuery(r)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_entity", err.Error())
+		return
+	}
+	metrics, err := store.BehaviourMetrics(r.Context(), query)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "query_failed", "behavioural metrics could not be queried")
 		return

@@ -366,7 +366,7 @@ export type BehaviourBaselineContext = {
 export type BehaviourScore = {
   event_id: string;
   entity_id: string;
-  entity_type: "identity" | "asset" | "collector";
+  entity_type: "identity" | "asset" | "collector" | "unknown";
   baseline: BehaviourBaselineContext;
   model_version: string;
   model_kind: string;

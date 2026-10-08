@@ -20,6 +20,7 @@ import type {
   IntelligenceSource,
   IntelligenceSourceListResponse,
   BehaviourMetrics,
+  BehaviourScore,
   BehaviourScoreListResponse,
 } from "@/lib/sentinel/types";
 
@@ -412,10 +413,17 @@ export async function addInvestigationNote(
 }
 
 
+export type BehaviourEntityFilter = {
+  entity_id: string;
+  entity_type: BehaviourScore["entity_type"];
+};
+
 export async function getBehaviourMetrics(
   signal?: AbortSignal,
+  entity?: BehaviourEntityFilter,
 ): Promise<BehaviourMetrics> {
-  const response = await fetch("/api/sentinel/api/v1/behaviour/metrics", {
+  const query = new URLSearchParams(entity ?? {});
+  const response = await fetch(`/api/sentinel/api/v1/behaviour/metrics?${query}`, {
     cache: "no-store",
     signal,
   });
@@ -425,9 +433,14 @@ export async function getBehaviourMetrics(
 export async function listBehaviourScores(
   limit = 50,
   signal?: AbortSignal,
+  entity?: BehaviourEntityFilter,
 ): Promise<BehaviourScoreListResponse> {
+  const query = new URLSearchParams({
+    ...entity,
+    limit: String(Math.min(Math.max(limit, 1), 200)),
+  });
   const response = await fetch(
-    `/api/sentinel/api/v1/behaviour/scores?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    `/api/sentinel/api/v1/behaviour/scores?${query}`,
     {
       cache: "no-store",
       signal,

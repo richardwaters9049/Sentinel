@@ -212,6 +212,38 @@ assert metrics["anomalous_scores"] >= 1
 assert metrics["average_score"] >= 0
 PY
 
+echo "Verifying entity-scoped scores and metrics..."
+python3 - <<PY
+import json
+from urllib.parse import urlencode
+from urllib.request import urlopen
+from urllib.error import HTTPError
+base="${BASE}"
+rolling=json.load(open("/tmp/sentinel-phase7-rolling-score.json"))
+entity={"entity_type":rolling["entity_type"],"entity_id":rolling["entity_id"]}
+def get(endpoint, params):
+    with urlopen(base+"/behaviour/"+endpoint+"?"+urlencode(params),timeout=10) as response:
+        return json.load(response)
+scores=get("scores",{**entity,"limit":200})
+metrics=get("metrics",entity)
+assert scores["count"] > 0
+assert all(s["entity_type"]==entity["entity_type"] and s["entity_id"]==entity["entity_id"] for s in scores["scores"])
+assert metrics["total_scores"] >= scores["count"]
+assert get("scores",{**entity,"limit":1})["count"]==1
+assert get("metrics",entity)["total_scores"]==metrics["total_scores"]
+assert get("scores",{**entity,"entity_type":"asset"})["count"]==0
+assert get("metrics",{**entity,"entity_type":"asset"})["total_scores"]==0
+assert get("scores",{"entity_type":"identity","entity_id":"phase7-nonexistent-entity"})["count"]==0
+for endpoint in ("scores","metrics"):
+    for invalid in ({"entity_id":"test"},{"entity_type":"identity"},{"entity_type":"invalid","entity_id":"test"},{"entity_type":"identity","entity_id":"x"*257}):
+        try:
+            get(endpoint,invalid)
+            raise AssertionError("invalid entity filter accepted")
+        except HTTPError as error:
+            assert error.code==400
+print("Entity scope, namespace separation, empty results and validation passed")
+PY
+
 echo "Verifying behavioural evidence propagation into findings and investigations..."
 "${SIM_BINARY}" \
   -url "http://127.0.0.1:${GATEWAY_PORT}" \

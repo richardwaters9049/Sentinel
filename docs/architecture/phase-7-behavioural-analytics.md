@@ -416,9 +416,20 @@ The Phase 7 smoke test verifies:
 9. analyst-visible explanations;
 10. synthetic model evaluation guardrails.
 
+## Entity pivots
+
+Scores and metrics accept an optional paired `entity_type` and `entity_id` query filter.
+Namespaces remain distinct: an identity and an asset with the same ID are not combined.
+IDs are bounded to 256 bytes and bound as SQL parameters. Unsupported types and incomplete
+pairs return HTTP 400. The score list retains its 200-record cap; metrics cover all persisted
+scores in the selected scope, rather than only the displayed rows.
+
+The Behaviour workspace offers an entity pivot from the selected score's rolling baseline
+and a clear action back to all entities. Loading a different scope cancels stale requests.
+Historical baseline snapshots remain unchanged.
+
 ## Remaining Phase 7 work
 
-- add richer analyst pivots by entity;
 - add drift monitoring and baseline-health signals;
 - mature the behavioural catalogue;
 - add the Phase 7 final regression and completion gate.

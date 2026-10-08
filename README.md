@@ -1149,7 +1149,8 @@ Raw event storage and normalised event storage may be separated later if volume 
 - anomaly features;
 - Python ML service;
 - model evaluation;
-- analyst-visible explanations.
+- analyst-visible explanations;
+- entity-scoped score exploration and matching metrics (identity, asset or collector).
 
 ### Phase 8 — Platform hardening
 

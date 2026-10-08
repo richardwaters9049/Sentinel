@@ -29,6 +29,7 @@ import {
   listBehaviourScores,
   updateBehaviourSettings,
 } from "@/lib/sentinel/client";
+import type { BehaviourEntityFilter } from "@/lib/sentinel/client";
 import type {
   BehaviourEvaluationRun,
   BehaviourMetrics,
@@ -54,6 +55,7 @@ function severityClass(severity: BehaviourScore["severity"]) {
 }
 
 export default function BehaviourWorkspace() {
+  const [entity, setEntity] = useState<BehaviourEntityFilter>();
   const [metrics, setMetrics] = useState<BehaviourMetrics | null>(null);
   const [scores, setScores] = useState<BehaviourScore[]>([]);
   const [selectedID, setSelectedID] = useState("");
@@ -64,6 +66,15 @@ export default function BehaviourWorkspace() {
   const [savingThreshold, setSavingThreshold] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  function changeEntity(next?: BehaviourEntityFilter) {
+    setLoading(true);
+    setError("");
+    setScores([]);
+    setMetrics(null);
+    setSelectedID("");
+    setEntity(next);
+  }
 
   async function refresh() {
     setLoading(true);
@@ -76,8 +87,8 @@ export default function BehaviourWorkspace() {
         modelData,
         evaluationData,
       ] = await Promise.all([
-        getBehaviourMetrics(),
-        listBehaviourScores(100),
+        getBehaviourMetrics(undefined, entity),
+        listBehaviourScores(100, undefined, entity),
         getBehaviourSettings(),
         listBehaviourModels(),
         listBehaviourEvaluations(8),
@@ -88,7 +99,11 @@ export default function BehaviourWorkspace() {
       setThresholdDraft(settingsData.anomaly_threshold);
       setModels(modelData.models);
       setEvaluations(evaluationData.evaluations);
-      setSelectedID((current) => current || scoreData.scores[0]?.event_id || "");
+      setSelectedID((current) =>
+        scoreData.scores.some((score) => score.event_id === current)
+          ? current
+          : scoreData.scores[0]?.event_id || "",
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -122,13 +137,14 @@ export default function BehaviourWorkspace() {
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
-      getBehaviourMetrics(controller.signal),
-      listBehaviourScores(100, controller.signal),
+      getBehaviourMetrics(controller.signal, entity),
+      listBehaviourScores(100, controller.signal, entity),
       getBehaviourSettings(controller.signal),
       listBehaviourModels(controller.signal),
       listBehaviourEvaluations(8, controller.signal),
     ])
       .then(([metricData, scoreData, settingsData, modelData, evaluationData]) => {
+        if (controller.signal.aborted) return;
         setMetrics(metricData);
         setScores(scoreData.scores);
         setSettings(settingsData);
@@ -138,17 +154,19 @@ export default function BehaviourWorkspace() {
         setSelectedID(scoreData.scores[0]?.event_id ?? "");
       })
       .catch((cause) => {
-        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        if (controller.signal.aborted) return;
         setError(
           cause instanceof Error
             ? cause.message
             : "Behavioural analytics could not be loaded",
         );
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => controller.abort();
-  }, []);
+  }, [entity]);
 
   const selected =
     scores.find((score) => score.event_id === selectedID) ?? scores[0];
@@ -196,6 +214,7 @@ export default function BehaviourWorkspace() {
 
             <Button
               type="button"
+              disabled={loading}
               onClick={() => void refresh()}
               variant="outline"
               size="icon"
@@ -213,6 +232,17 @@ export default function BehaviourWorkspace() {
             </div>
           ) : null}
 
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <p className="min-w-0 break-all text-sm text-slate-300" aria-live="polite">
+              {entity ? `${entity.entity_type}: ${entity.entity_id}` : "All entities"}
+              <span className="ml-2 text-slate-500">· metrics cover all persisted scores in this scope</span>
+            </p>
+            {entity ? (
+              <Button variant="outline" onClick={() => changeEntity()} disabled={loading}>
+                Show all entities
+              </Button>
+            ) : null}
+          </div>
           <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               [metrics?.total_scores ?? 0, "events scored", Activity],
@@ -438,7 +468,7 @@ export default function BehaviourWorkspace() {
                 ))}
                 {!loading && scores.length === 0 ? (
                   <div className="grid min-h-48 place-items-center text-center text-[0.68rem] leading-5 text-slate-600">
-                    No behavioural scores have been persisted yet.
+                    {entity ? "No behavioural scores match this entity." : "No behavioural scores have been persisted yet."}
                   </div>
                 ) : null}
               </CardContent>
@@ -517,6 +547,20 @@ export default function BehaviourWorkspace() {
                         </Badge>
                       </div>
                     </CardHeader>
+                    {!entity ? (
+                      <div className="px-5 pb-4">
+                        <Button
+                          variant="outline"
+                          disabled={loading}
+                          onClick={() => changeEntity({
+                            entity_id: selected.entity_id,
+                            entity_type: selected.entity_type,
+                          })}
+                        >
+                          Explore this entity&apos;s scores
+                        </Button>
+                      </div>
+                    ) : null}
                     <Separator className="bg-violet-400/10" />
                     <CardContent className="grid gap-2 p-4 sm:grid-cols-2">
                       {[

@@ -104,6 +104,28 @@ func (d *Database) GetBehaviourBaselineContext(
 	return baseline, nil
 }
 
+// BehaviourQuery scopes scores and metrics to the same entity namespace.
+type BehaviourQuery struct {
+	Limit      int
+	EntityID   string
+	EntityType string
+}
+
+func (q BehaviourQuery) Validate() error {
+	if (q.EntityID == "") != (q.EntityType == "") {
+		return fmt.Errorf("entity_id and entity_type must be supplied together")
+	}
+	if len(q.EntityID) > 256 {
+		return fmt.Errorf("entity_id must be at most 256 bytes")
+	}
+	switch q.EntityType {
+	case "", "identity", "asset", "collector", "unknown":
+		return nil
+	default:
+		return fmt.Errorf("unsupported entity_type")
+	}
+}
+
 type BehaviourMetrics struct {
 	TotalScores        int64      `json:"total_scores"`
 	AnomalousScores    int64      `json:"anomalous_scores"`
@@ -233,11 +255,15 @@ func (d *Database) GetEventBehaviourScore(
 
 func (d *Database) ListBehaviourScores(
 	ctx context.Context,
-	limit int,
+	query BehaviourQuery,
 ) ([]behaviour.Score, error) {
 	if d == nil || d.pool == nil {
 		return nil, fmt.Errorf("database is not initialised")
 	}
+	if err := query.Validate(); err != nil {
+		return nil, err
+	}
+	limit := query.Limit
 	if limit <= 0 {
 		limit = 50
 	}
@@ -260,9 +286,11 @@ func (d *Database) ListBehaviourScores(
 			explanations,
 			scored_at
 		FROM behavioural_scores
+		WHERE ($2 = '' OR entity_type = $2)
+		  AND ($3 = '' OR entity_id = $3)
 		ORDER BY scored_at DESC, event_id
 		LIMIT $1
-	`, limit)
+	`, limit, query.EntityType, query.EntityID)
 	if err != nil {
 		return nil, fmt.Errorf("query behavioural scores: %w", err)
 	}
@@ -379,9 +407,14 @@ func (d *Database) behaviourScoresForEventIDs(
 
 func (d *Database) BehaviourMetrics(
 	ctx context.Context,
+	query BehaviourQuery,
 ) (BehaviourMetrics, error) {
 	if d == nil || d.pool == nil {
 		return BehaviourMetrics{}, fmt.Errorf("database is not initialised")
+	}
+
+	if err := query.Validate(); err != nil {
+		return BehaviourMetrics{}, err
 	}
 
 	var metrics BehaviourMetrics
@@ -393,7 +426,9 @@ func (d *Database) BehaviourMetrics(
 			COALESCE(AVG(anomaly_score), 0),
 			MAX(scored_at)
 		FROM behavioural_scores
-	`).Scan(
+		WHERE ($1 = '' OR entity_type = $1)
+		  AND ($2 = '' OR entity_id = $2)
+	`, query.EntityType, query.EntityID).Scan(
 		&metrics.TotalScores,
 		&metrics.AnomalousScores,
 		&metrics.HighSeverityScores,
