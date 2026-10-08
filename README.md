@@ -37,6 +37,8 @@ Behavioural analytics supplement deterministic detections. Their synthetic evalu
 
 ## Getting started
 
+From `/Users/richy/Documents/Github/Sentinel`, run `./sent-start` to start the complete authenticated local lab. The launcher handles dependencies, private credentials and service readiness, then opens sign-in. Press Ctrl-C to stop its gateway and console.
+
 The local lab uses Go 1.27.1, Bun 1.3.14 and Docker Compose, with Python 3 for authentication provisioning and smoke scripts. The [local development guide](docs/LOCAL_DEVELOPMENT.md) covers installation, service startup, private lab credentials and checks.
 
 For architecture, event contracts, detection rules and engineering decisions, see the [project docs](docs/README.md).

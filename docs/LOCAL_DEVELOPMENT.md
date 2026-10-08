@@ -18,6 +18,30 @@ Configuration placeholders live in [the root example](../.env.example) and
 [the console example](../apps/console/.env.example). The Go process reads environment
 variables; it does not automatically load the root example file.
 
+## Start everything with one command
+
+From `/Users/richy/Documents/Github/Sentinel`:
+
+```bash
+cd /Users/richy/Documents/Github/Sentinel
+./sent-start
+```
+
+The root launcher opens Docker Desktop on macOS if needed, starts Compose dependencies,
+installs locked frontend dependencies, builds the gateway, provisions private eight-hour
+lab credentials, and starts the authenticated gateway and console. It waits for readiness
+before opening the sign-in page and prints the credential-file path, never the credential.
+
+Keep the terminal open. Ctrl-C stops only the gateway and console started by this launcher;
+Docker dependencies and the PostgreSQL volume remain available. Existing listeners on
+3000 or 8080 are reported rather than terminated. Logs and the gateway binary are stored
+in a private run directory outside the repository.
+
+Optional flags: `--no-browser`, `--copy-token` (copy the analyst credential to the macOS
+clipboard), `--check` (prerequisites and ports only), `--console-port PORT`, and
+`--gateway-port PORT`. Each launch provisions a new credential registry; use the newly
+printed credential file for that run. The manual startup steps below remain available.
+
 ## Install and start infrastructure
 
 From `/Users/richy/Documents/Github/Sentinel`:
@@ -91,6 +115,7 @@ From `/Users/richy/Documents/Github/Sentinel`:
 
 ```bash
 cd /Users/richy/Documents/Github/Sentinel
+python3 scripts/test_sent_start.py
 make check
 make console-lint
 make console-build
