@@ -1,4 +1,4 @@
-.PHONY: ml-catalogue-evaluate help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7 final-phase7
+.PHONY: ml-catalogue-evaluate help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7 final-phase7 smoke-phase8
 
 help:
 	@echo "Sentinel development commands"
@@ -40,6 +40,7 @@ help:
 	@echo "  make final-phase6      Run the complete Phase 6 regression suite"
 	@echo "  make smoke-phase7      Run the Phase 7 behavioural analytics vertical slice"
 	@echo "  make final-phase7      Run the complete Phase 7 regression and completion gate"
+	@echo "  make smoke-phase8      Run isolated API authentication/RBAC checks"
 
 dev-up:
 	docker compose up -d
@@ -164,3 +165,6 @@ ml-catalogue-evaluate:
 
 final-phase7:
 	./scripts/phase7-final-regression.sh
+
+smoke-phase8:
+	python3 scripts/phase8-access-smoke.py

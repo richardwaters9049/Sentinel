@@ -268,7 +268,7 @@ func (s *stubFindingReader) InvestigationMetrics(context.Context) (database.Inve
 func TestHealth(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := localRequest(http.MethodGet, "/health", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, nil).Handler().ServeHTTP(res, req)
@@ -289,7 +289,7 @@ func TestHealth(t *testing.T) {
 func TestReadyReturnsOKWhenDependenciesPass(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := localRequest(http.MethodGet, "/ready", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, nil).Handler().ServeHTTP(res, req)
@@ -310,7 +310,7 @@ func TestReadyReturnsUnavailableWhenDependencyFails(t *testing.T) {
 		"postgres": func(context.Context) error { return errors.New("down") },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := localRequest(http.MethodGet, "/ready", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, nil).Handler().ServeHTTP(res, req)
@@ -342,7 +342,7 @@ func TestTelemetryAcceptsValidEvent(t *testing.T) {
 		"event": {"category": "authentication", "action": "login", "outcome": "success"}
 	}`
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(body))
+	req := localRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(body))
 	res := httptest.NewRecorder()
 
 	newTestServer(ingestor, nil).Handler().ServeHTTP(res, req)
@@ -366,7 +366,7 @@ func TestTelemetryRejectsUnknownFields(t *testing.T) {
 		"unexpected": true
 	}`
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(body))
+	req := localRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(body))
 	res := httptest.NewRecorder()
 
 	newTestServer(stubIngestor{}, nil).Handler().ServeHTTP(res, req)
@@ -379,7 +379,7 @@ func TestTelemetryRejectsUnknownFields(t *testing.T) {
 func TestTelemetryReturnsValidationFailure(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(`{
+	req := localRequest(http.MethodPost, "/api/v1/telemetry", strings.NewReader(`{
 		"timestamp": "2026-10-06T20:59:00Z",
 		"source": {"type": "identity", "collector": "test"},
 		"event": {"category": "authentication", "action": "login"}
@@ -413,7 +413,7 @@ func TestEventsReturnsStoredEvents(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?limit=25&category=authentication&asset_id=asset-01", nil)
+	req := localRequest(http.MethodGet, "/api/v1/events?limit=25&category=authentication&asset_id=asset-01", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, reader).Handler().ServeHTTP(res, req)
@@ -436,7 +436,7 @@ func TestEventsReturnsStoredEvents(t *testing.T) {
 func TestEventsRejectsInvalidLimit(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/events?limit=999", nil)
+	req := localRequest(http.MethodGet, "/api/v1/events?limit=999", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, &stubEventReader{}).Handler().ServeHTTP(res, req)
@@ -465,7 +465,7 @@ func TestFindingsReturnsStoredFindings(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?limit=10&severity=high&status=new", nil)
+	req := localRequest(http.MethodGet, "/api/v1/findings?limit=10&severity=high&status=new", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
@@ -489,7 +489,7 @@ func TestFindingsRejectsInvalidSeverity(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?severity=extreme", nil)
+	req := localRequest(http.MethodGet, "/api/v1/findings?severity=extreme", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, &stubFindingReader{}).Handler().ServeHTTP(res, req)
@@ -519,7 +519,7 @@ func TestFindingDetailReturnsEvidenceAndAudit(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test_001", nil)
+	req := localRequest(http.MethodGet, "/api/v1/findings/fnd_test_001", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
@@ -540,7 +540,7 @@ func TestFindingStatusRequiresActor(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(
+	req := localRequest(
 		http.MethodPatch,
 		"/api/v1/findings/fnd_test_001/status",
 		strings.NewReader(`{"status":"triaged"}`),
@@ -566,7 +566,7 @@ func TestFindingStatusUpdatesAuditedWorkflow(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(
+	req := localRequest(
 		http.MethodPatch,
 		"/api/v1/findings/fnd_test_001/status",
 		strings.NewReader(`{"status":"triaged"}`),
@@ -599,7 +599,7 @@ func TestFindingStatusMapsInvalidTransitionToConflict(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(
+	req := localRequest(
 		http.MethodPatch,
 		"/api/v1/findings/fnd_test_001/status",
 		strings.NewReader(`{"status":"confirmed"}`),
@@ -627,7 +627,7 @@ func TestDetectionsReturnsDetectionMetadata(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/detections", nil)
+	req := localRequest(http.MethodGet, "/api/v1/detections", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
@@ -649,7 +649,7 @@ func TestDetectionStateUpdateRequiresActorAndBoolean(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(
+	req := localRequest(
 		http.MethodPatch,
 		"/api/v1/detections/DET-AUTH-001",
 		strings.NewReader(`{"enabled":false}`),
@@ -681,7 +681,7 @@ func TestFindingEvidenceReturnsLinkedAndContextEvents(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=10", nil)
+	req := localRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=10", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
@@ -705,7 +705,7 @@ func TestFindingEvidenceRejectsInvalidContextWindow(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=90", nil)
+	req := localRequest(http.MethodGet, "/api/v1/findings/fnd_test/evidence?context_minutes=90", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, &stubFindingReader{}).Handler().ServeHTTP(res, req)
@@ -733,7 +733,7 @@ func TestDetectionMetricsReturnsQualityData(t *testing.T) {
 		"nats":     func(context.Context) error { return nil },
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/detections/metrics", nil)
+	req := localRequest(http.MethodGet, "/api/v1/detections/metrics", nil)
 	res := httptest.NewRecorder()
 
 	New(checker, nil, nil, reader).Handler().ServeHTTP(res, req)
@@ -749,7 +749,7 @@ func TestDetectionMetricsReturnsQualityData(t *testing.T) {
 func TestSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := localRequest(http.MethodGet, "/health", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, nil).Handler().ServeHTTP(res, req)
@@ -766,7 +766,7 @@ func TestSecurityHeaders(t *testing.T) {
 func TestMethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodPost, "/health", nil)
+	req := localRequest(http.MethodPost, "/health", nil)
 	res := httptest.NewRecorder()
 
 	newTestServer(nil, nil).Handler().ServeHTTP(res, req)

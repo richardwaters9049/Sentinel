@@ -50,7 +50,7 @@ func TestBehaviourCatalogueAPI(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			reader := &catalogueReader{fail: tc.fail, invalid: tc.invalid}
 			res := httptest.NewRecorder()
-			NewWithBehaviourCatalogue(nil, nil, nil, nil, reader).Handler().ServeHTTP(res, httptest.NewRequest(tc.method, "/api/v1/behaviour/catalogue"+tc.query, nil))
+			NewWithBehaviourCatalogue(nil, nil, nil, nil, reader).Handler().ServeHTTP(res, localRequest(tc.method, "/api/v1/behaviour/catalogue"+tc.query, nil))
 			if res.Code != tc.status || reader.calls != tc.calls {
 				t.Fatalf("status %d calls %d: %s", res.Code, reader.calls, res.Body.String())
 			}
@@ -60,7 +60,7 @@ func TestBehaviourCatalogueAPI(t *testing.T) {
 		})
 	}
 	res := httptest.NewRecorder()
-	New(nil, nil, nil, nil).Handler().ServeHTTP(res, httptest.NewRequest("GET", "/api/v1/behaviour/catalogue", nil))
+	New(nil, nil, nil, nil).Handler().ServeHTTP(res, localRequest("GET", "/api/v1/behaviour/catalogue", nil))
 	if res.Code != 503 {
 		t.Fatal("disabled catalogue accepted")
 	}

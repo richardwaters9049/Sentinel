@@ -30,6 +30,11 @@ func main() {
 		Level: parseLogLevel(cfg.LogLevel),
 	}))
 
+	logger.Info("API authentication configured", "mode", cfg.AuthMode)
+	if cfg.Access == nil {
+		logger.Warn("development API authentication bypass enabled; loopback clients only")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -106,7 +111,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).Handler(),
+		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).WithAccess(cfg.Access, logger).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 

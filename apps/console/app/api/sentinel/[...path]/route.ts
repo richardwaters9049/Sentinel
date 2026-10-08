@@ -33,7 +33,7 @@ async function proxy(
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("Content-Type", contentType);
 
-  for (const header of ["x-sentinel-actor", "x-request-id"]) {
+  for (const header of ["authorization", "x-sentinel-actor", "x-request-id"]) {
     const value = request.headers.get(header);
     if (value) headers.set(header, value);
   }

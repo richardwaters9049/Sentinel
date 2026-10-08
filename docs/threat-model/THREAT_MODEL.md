@@ -2,7 +2,7 @@
 
 ## Status
 
-Initial threat model for Phase 0. This document must evolve with the architecture.
+Initial threat model, updated for the first Phase Eight API access-control slice.
 
 ## Security objectives
 
@@ -90,12 +90,18 @@ Controls:
 
 Risk: a user or service could perform actions outside its intended role.
 
-Controls planned:
+Implemented in required authentication mode:
 
-- deny-by-default RBAC;
-- server-side authorisation;
-- service-specific credentials;
-- auditable privileged actions.
+- explicit route permissions and denial of routes without a policy;
+- gateway-verified expiring API credentials with server-provisioned roles;
+- collector, analyst and administrator separation;
+- authenticated actor attribution in domain audits and structured access-decision logs.
+
+Residual risks: interactive user sign-in, online revocation and durable access-log
+retention are outstanding. Development compatibility trusts loopback callers, including
+local proxies. Manifest/host operators remain trusted. These controls do not establish
+signed event-source provenance or per-investigation ownership enforcement.
+See [ADR 0005](../adr/0005-api-authentication.md).
 
 ### Evidence integrity
 

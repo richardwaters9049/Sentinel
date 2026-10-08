@@ -53,7 +53,7 @@ func TestBehaviourEntityFilters(t *testing.T) {
 		} {
 			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
 				store := &entityBehaviourStore{}
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/behaviour/"+endpoint+tc.query, nil)
+				req := localRequest(http.MethodGet, "/api/v1/behaviour/"+endpoint+tc.query, nil)
 				res := httptest.NewRecorder()
 				New(nil, nil, nil, store).Handler().ServeHTTP(res, req)
 				if res.Code != tc.status {
@@ -77,7 +77,7 @@ func TestBehaviourScoreLimit(t *testing.T) {
 	for _, limit := range []string{"0", "201", "bogus"} {
 		store := &entityBehaviourStore{}
 		res := httptest.NewRecorder()
-		New(nil, nil, nil, store).Handler().ServeHTTP(res, httptest.NewRequest("GET", "/api/v1/behaviour/scores?limit="+limit, nil))
+		New(nil, nil, nil, store).Handler().ServeHTTP(res, localRequest("GET", "/api/v1/behaviour/scores?limit="+limit, nil))
 		if res.Code != 400 || store.calls != 0 {
 			t.Fatalf("invalid limit accepted: %s", limit)
 		}
@@ -110,7 +110,7 @@ func TestBehaviourMonitorAPI(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &monitorStore{fail: tc.fail}
 			res := httptest.NewRecorder()
-			New(nil, nil, nil, store).Handler().ServeHTTP(res, httptest.NewRequest("GET", "/api/v1/behaviour/monitor"+tc.path, nil))
+			New(nil, nil, nil, store).Handler().ServeHTTP(res, localRequest("GET", "/api/v1/behaviour/monitor"+tc.path, nil))
 			if res.Code != tc.status {
 				t.Fatalf("%d %s", res.Code, res.Body.String())
 			}
@@ -126,7 +126,7 @@ func TestBehaviourMonitorAPI(t *testing.T) {
 		})
 	}
 	res := httptest.NewRecorder()
-	New(nil, nil, nil, nil).Handler().ServeHTTP(res, httptest.NewRequest("GET", "/api/v1/behaviour/monitor", nil))
+	New(nil, nil, nil, nil).Handler().ServeHTTP(res, localRequest("GET", "/api/v1/behaviour/monitor", nil))
 	if res.Code != 503 {
 		t.Fatal("missing store accepted")
 	}
@@ -145,7 +145,7 @@ func TestMonitorAvailability(t *testing.T) {
 				}
 			}
 			res := httptest.NewRecorder()
-			New(readiness.New(time.Second, checks), nil, nil, &monitorStore{}).Handler().ServeHTTP(res, httptest.NewRequest("GET", "/api/v1/behaviour/monitor", nil))
+			New(readiness.New(time.Second, checks), nil, nil, &monitorStore{}).Handler().ServeHTTP(res, localRequest("GET", "/api/v1/behaviour/monitor", nil))
 			var monitor behaviour.Monitor
 			if err := json.Unmarshal(res.Body.Bytes(), &monitor); err != nil {
 				t.Fatal(err)

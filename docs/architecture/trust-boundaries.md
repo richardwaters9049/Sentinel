@@ -16,7 +16,10 @@ Initial controls:
 - server timeouts;
 - structured logging.
 
-Authentication and RBAC are planned before the system exposes privileged workflows.
+Required authentication mode now verifies short-lived lab API credentials and applies
+explicit route RBAC. Audit actors derive from authenticated context. Development mode
+remains a loopback-only compatibility bypass and must not be exposed through proxies.
+See [Phase Eight access boundary](phase-8-platform-hardening.md).
 
 ### 2. Telemetry producer to Gateway
 

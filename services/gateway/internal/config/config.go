@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/access"
 )
 
 const (
 	defaultEnvironment       = "development"
-	defaultHTTPAddr          = ":8080"
+	defaultHTTPAddr          = "127.0.0.1:8080"
 	defaultLogLevel          = "info"
 	defaultDatabaseURL       = "postgres://sentinel:sentinel_dev_only@127.0.0.1:55432/sentinel?sslmode=disable"
 	defaultNATSURL           = "nats://127.0.0.1:4222"
@@ -21,6 +23,8 @@ const (
 )
 
 type Config struct {
+	Access            *access.Verifier
+	AuthMode          string
 	Environment       string
 	HTTPAddr          string
 	LogLevel          string
@@ -45,6 +49,28 @@ func Load() (Config, error) {
 		DependencyTimeout: getDurationEnv("SENTINEL_DEPENDENCY_TIMEOUT", defaultDependencyWait),
 		ShutdownTimeout:   getDurationEnv("SENTINEL_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
 		ReadHeaderTimeout: getDurationEnv("SENTINEL_READ_HEADER_TIMEOUT", defaultReadHeaderTimeout),
+	}
+
+	cfg.AuthMode = getEnv("SENTINEL_AUTH_MODE", "required")
+	if os.Getenv("SENTINEL_AUTH_MODE") == "" && cfg.Environment == "development" {
+		cfg.AuthMode = "development"
+	}
+	switch cfg.AuthMode {
+	case "development":
+		if cfg.Environment != "development" {
+			return Config{}, fmt.Errorf("development authentication mode requires SENTINEL_ENV=development")
+		}
+		if os.Getenv("SENTINEL_AUTH_CREDENTIALS_FILE") != "" {
+			return Config{}, fmt.Errorf("credential file requires authentication mode required")
+		}
+	case "required":
+		verifier, err := access.LoadFile(os.Getenv("SENTINEL_AUTH_CREDENTIALS_FILE"), time.Now().UTC())
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Access = verifier
+	default:
+		return Config{}, fmt.Errorf("unsupported SENTINEL_AUTH_MODE")
 	}
 
 	if !strings.HasPrefix(cfg.HTTPAddr, ":") && !strings.Contains(cfg.HTTPAddr, ":") {

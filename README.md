@@ -10,7 +10,7 @@ The project is deliberately more ambitious than a conventional CRUD or dashboard
 
 ## Project status
 
-**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation complete; Phase 6 intelligence and enrichment complete; Phase 7 behavioural analytics complete (simulated scope; documented model-coverage limitations).
+**Status:** Phase 1 telemetry pipeline complete; Phase 2 detection engineering complete; Phase 3 threat hunting and investigation complete; Phase 4 analyst console complete; Phase 5 OT simulation complete; Phase 6 intelligence and enrichment complete; Phase 7 behavioural analytics complete (simulated scope; documented model-coverage limitations); Phase 8 platform hardening in progress.
 
 The first production-shaped vertical slice is now implemented:
 
@@ -1156,6 +1156,10 @@ Raw event storage and normalised event storage may be separated later if volume 
 - a passing combined regression gate: `make final-phase7` (see [completion evidence](docs/architecture/phase-7-completion.md)).
 
 ### Phase 8 — Platform hardening
+
+The initial [API authentication/RBAC slice](docs/architecture/phase-8-platform-hardening.md)
+is implemented with short-lived lab credentials, verified audit actors and local-only
+development compatibility. Interactive console sign-in remains outstanding.
 
 - authentication;
 - RBAC;

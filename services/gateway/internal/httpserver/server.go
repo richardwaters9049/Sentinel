@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/access"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/database"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
@@ -83,12 +85,15 @@ type AnalystStore interface {
 }
 
 type Server struct {
-	mux       *http.ServeMux
-	readiness *readiness.Checker
-	ingestor  TelemetryIngestor
-	events    EventReader
-	analyst   AnalystStore
-	catalogue BehaviourCatalogueReader
+	access      *access.Verifier
+	auditLogger *slog.Logger
+	policies    map[string][]string
+	mux         *http.ServeMux
+	readiness   *readiness.Checker
+	ingestor    TelemetryIngestor
+	events      EventReader
+	analyst     AnalystStore
+	catalogue   BehaviourCatalogueReader
 }
 
 func New(
@@ -108,6 +113,7 @@ func NewWithBehaviourCatalogue(
 	catalogue BehaviourCatalogueReader,
 ) *Server {
 	s := &Server{
+		policies:  make(map[string][]string),
 		catalogue: catalogue,
 		mux:       http.NewServeMux(),
 		readiness: readinessChecker,
@@ -120,55 +126,56 @@ func NewWithBehaviourCatalogue(
 }
 
 func (s *Server) Handler() http.Handler {
-	return securityHeaders(limitRequestBody(s.mux))
+	return securityHeaders(limitRequestBody(s.authorise(s.mux)))
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("/health", method(http.MethodGet, s.handleHealth))
-	s.mux.HandleFunc("/ready", method(http.MethodGet, s.handleReady))
-	s.mux.HandleFunc("/api/v1/telemetry", method(http.MethodPost, s.handleTelemetry))
-	s.mux.HandleFunc("/api/v1/events", method(http.MethodGet, s.handleEvents))
-	s.mux.HandleFunc("/api/v1/findings", method(http.MethodGet, s.handleFindings))
-	s.mux.HandleFunc("GET /api/v1/findings/{id}", s.handleFindingDetail)
-	s.mux.HandleFunc("GET /api/v1/findings/{id}/evidence", s.handleFindingEvidence)
-	s.mux.HandleFunc("PATCH /api/v1/findings/{id}/status", s.handleFindingStatus)
-	s.mux.HandleFunc("GET /api/v1/detections", s.handleDetections)
-	s.mux.HandleFunc("GET /api/v1/detections/metrics", s.handleDetectionMetrics)
-	s.mux.HandleFunc("GET /api/v1/intelligence/indicators", s.handleIntelligenceIndicators)
-	s.mux.HandleFunc("GET /api/v1/intelligence/sources", s.handleIntelligenceSources)
-	s.mux.HandleFunc("PATCH /api/v1/intelligence/sources/{id}", s.handleIntelligenceSourceState)
-	s.mux.HandleFunc("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches)
-	s.mux.HandleFunc("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics)
-	s.mux.HandleFunc("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments)
-	s.mux.HandleFunc("GET /api/v1/behaviour/catalogue", s.handleBehaviourCatalogue)
-	s.mux.HandleFunc("GET /api/v1/behaviour/scores", s.handleBehaviourScores)
-	s.mux.HandleFunc("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics)
-	s.mux.HandleFunc("GET /api/v1/behaviour/monitor", s.handleBehaviourMonitor)
-	s.mux.HandleFunc("GET /api/v1/behaviour/settings", s.handleBehaviourSettings)
-	s.mux.HandleFunc("PATCH /api/v1/behaviour/settings", s.handleBehaviourSettingsUpdate)
-	s.mux.HandleFunc("GET /api/v1/behaviour/models", s.handleBehaviourModels)
-	s.mux.HandleFunc("GET /api/v1/behaviour/evaluations", s.handleBehaviourEvaluations)
-	s.mux.HandleFunc("POST /api/v1/behaviour/evaluations", s.handleBehaviourEvaluationCreate)
-	s.mux.HandleFunc("GET /api/v1/events/{id}/behaviour", s.handleEventBehaviour)
-	s.mux.HandleFunc("PATCH /api/v1/detections/{id}", s.handleDetectionState)
-	s.mux.HandleFunc("GET /api/v1/hunts", s.handleHunts)
-	s.mux.HandleFunc("POST /api/v1/hunts", s.handleCreateHunt)
-	s.mux.HandleFunc("GET /api/v1/hunts/{id}", s.handleHuntDetail)
-	s.mux.HandleFunc("PATCH /api/v1/hunts/{id}", s.handleUpdateHunt)
-	s.mux.HandleFunc("GET /api/v1/hunts/{id}/versions", s.handleHuntVersions)
-	s.mux.HandleFunc("POST /api/v1/hunts/{id}/run", s.handleRunHunt)
-	s.mux.HandleFunc("GET /api/v1/hunts/{id}/runs", s.handleHuntRuns)
-	s.mux.HandleFunc("GET /api/v1/hunts/metrics", s.handleHuntMetrics)
-	s.mux.HandleFunc("GET /api/v1/assets/{id}/pivot", s.handleAssetPivot)
-	s.mux.HandleFunc("GET /api/v1/identities/{id}/pivot", s.handleIdentityPivot)
-	s.mux.HandleFunc("GET /api/v1/investigations", s.handleInvestigations)
-	s.mux.HandleFunc("POST /api/v1/investigations", s.handleCreateInvestigation)
-	s.mux.HandleFunc("GET /api/v1/investigations/{id}", s.handleInvestigationDetail)
-	s.mux.HandleFunc("POST /api/v1/investigations/{id}/notes", s.handleInvestigationNote)
-	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}/status", s.handleInvestigationStatus)
-	s.mux.HandleFunc("PATCH /api/v1/investigations/{id}", s.handleInvestigationMetadata)
-	s.mux.HandleFunc("POST /api/v1/investigations/{id}/hunt-runs/{run_id}", s.handleAttachHuntRun)
-	s.mux.HandleFunc("GET /api/v1/investigations/metrics", s.handleInvestigationMetrics)
+	s.register("GET /api/v1/session", s.handleSession, access.Analyst, access.Administrator, access.Collector)
+	s.register("/health", method(http.MethodGet, s.handleHealth))
+	s.register("/ready", method(http.MethodGet, s.handleReady))
+	s.register("POST /api/v1/telemetry", method(http.MethodPost, s.handleTelemetry), access.Collector)
+	s.register("GET /api/v1/events", method(http.MethodGet, s.handleEvents), access.Analyst, access.Administrator)
+	s.register("GET /api/v1/findings", method(http.MethodGet, s.handleFindings), access.Analyst, access.Administrator)
+	s.register("GET /api/v1/findings/{id}", s.handleFindingDetail, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/findings/{id}/evidence", s.handleFindingEvidence, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/findings/{id}/status", s.handleFindingStatus, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/detections", s.handleDetections, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/detections/metrics", s.handleDetectionMetrics, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/intelligence/indicators", s.handleIntelligenceIndicators, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/intelligence/sources", s.handleIntelligenceSources, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/intelligence/sources/{id}", s.handleIntelligenceSourceState, access.Administrator)
+	s.register("GET /api/v1/intelligence/matches", s.handleIntelligenceMatches, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/intelligence/metrics", s.handleIntelligenceMetrics, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/events/{id}/enrichments", s.handleEventEnrichments, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/catalogue", s.handleBehaviourCatalogue, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/scores", s.handleBehaviourScores, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/metrics", s.handleBehaviourMetrics, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/monitor", s.handleBehaviourMonitor, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/settings", s.handleBehaviourSettings, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/behaviour/settings", s.handleBehaviourSettingsUpdate, access.Administrator)
+	s.register("GET /api/v1/behaviour/models", s.handleBehaviourModels, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/behaviour/evaluations", s.handleBehaviourEvaluations, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/behaviour/evaluations", s.handleBehaviourEvaluationCreate, access.Administrator)
+	s.register("GET /api/v1/events/{id}/behaviour", s.handleEventBehaviour, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/detections/{id}", s.handleDetectionState, access.Administrator)
+	s.register("GET /api/v1/hunts", s.handleHunts, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/hunts", s.handleCreateHunt, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/hunts/{id}", s.handleHuntDetail, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/hunts/{id}", s.handleUpdateHunt, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/hunts/{id}/versions", s.handleHuntVersions, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/hunts/{id}/run", s.handleRunHunt, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/hunts/{id}/runs", s.handleHuntRuns, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/hunts/metrics", s.handleHuntMetrics, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/assets/{id}/pivot", s.handleAssetPivot, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/identities/{id}/pivot", s.handleIdentityPivot, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/investigations", s.handleInvestigations, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/investigations", s.handleCreateInvestigation, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/investigations/{id}", s.handleInvestigationDetail, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/investigations/{id}/notes", s.handleInvestigationNote, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/investigations/{id}/status", s.handleInvestigationStatus, access.Analyst, access.Administrator)
+	s.register("PATCH /api/v1/investigations/{id}", s.handleInvestigationMetadata, access.Analyst, access.Administrator)
+	s.register("POST /api/v1/investigations/{id}/hunt-runs/{run_id}", s.handleAttachHuntRun, access.Analyst, access.Administrator)
+	s.register("GET /api/v1/investigations/metrics", s.handleInvestigationMetrics, access.Analyst, access.Administrator)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -374,7 +381,7 @@ func (s *Server) handleBehaviourSettingsUpdate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -459,7 +466,7 @@ func (s *Server) handleBehaviourEvaluationCreate(w http.ResponseWriter, r *http.
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -551,7 +558,7 @@ func (s *Server) handleIntelligenceSourceState(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -776,7 +783,7 @@ func (s *Server) handleFindingStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -848,7 +855,7 @@ func (s *Server) handleDetectionState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return

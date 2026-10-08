@@ -35,7 +35,7 @@ func (s *Server) handleCreateHunt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -97,7 +97,7 @@ func (s *Server) handleUpdateHunt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -180,7 +180,7 @@ func (s *Server) handleRunHunt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -365,7 +365,7 @@ func (s *Server) handleCreateInvestigation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -431,7 +431,7 @@ func (s *Server) handleInvestigationNote(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -473,7 +473,7 @@ func (s *Server) handleInvestigationMetadata(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -521,7 +521,7 @@ func (s *Server) handleAttachHuntRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
@@ -561,7 +561,7 @@ func (s *Server) handleInvestigationStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	actorID := strings.TrimSpace(r.Header.Get("X-Sentinel-Actor"))
+	actorID := requestActor(r)
 	if actorID == "" {
 		writeAPIError(w, http.StatusBadRequest, "actor_required", "X-Sentinel-Actor header is required")
 		return
