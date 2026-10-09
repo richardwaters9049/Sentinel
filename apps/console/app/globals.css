@@ -146,3 +146,13 @@ a,
     inset 0 1px 0 rgb(255 255 255 / 0.025),
     0 24px 80px rgb(0 0 0 / 0.16);
 }
+
+.sentinel-opening-atmosphere {
+  background:
+    radial-gradient(ellipse at 34% 44%, rgb(34 211 238 / 0.055), transparent 45%),
+    radial-gradient(ellipse at 68% 56%, rgb(139 92 246 / 0.09), transparent 45%),
+    linear-gradient(rgb(148 163 184 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.025) 1px, transparent 1px);
+  background-size: auto, auto, 64px 64px, 64px 64px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 85%);
+}

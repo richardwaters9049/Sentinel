@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Suspense } from "react";
 
+import OpeningSequence from "@/components/sentinel/opening-sequence";
 import SentinelBrand from "@/components/sentinel/brand";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -36,22 +37,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to main content
         </a>
-        <TooltipProvider>
-          <div id="main-content" tabIndex={-1}>
-            <Suspense
-              fallback={
-                <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6">
-                  <SentinelBrand variant="hero" />
-                  <p className="text-sm text-slate-400" role="status">
-                    Checking console access…
-                  </p>
-                </div>
-              }
-            >
-              {children}
-            </Suspense>
-          </div>
-        </TooltipProvider>
+        <OpeningSequence>
+          <TooltipProvider>
+            <div id="main-content" tabIndex={-1}>
+              <Suspense
+                fallback={
+                  <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6">
+                    <SentinelBrand variant="hero" />
+                    <p className="text-sm text-slate-400" role="status">
+                      Checking console access…
+                    </p>
+                  </div>
+                }
+              >
+                {children}
+              </Suspense>
+            </div>
+          </TooltipProvider>
+        </OpeningSequence>
       </body>
     </html>
   );
