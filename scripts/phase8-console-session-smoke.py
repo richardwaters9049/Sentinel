@@ -52,6 +52,7 @@ def main() -> None:
         tokens = {role: secrets.token_urlsafe(32) for role in ("analyst", "administrator", "collector")}
         if args.browser_fixture:
             tokens["analyst"] = "A" * 43  # Deliberately synthetic, isolated, temporary QA credential.
+            tokens["administrator"] = "B" * 42 + "A"
         prefix = "session-smoke-" + secrets.token_hex(8)
         expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         manifest = [{"subject": f"{prefix}-{role}", "role": role,
@@ -119,6 +120,41 @@ def main() -> None:
                 investigation, _ = expect(201, "/investigations", method="POST", csrf=session["csrf_token"], payload={"title": "Synthetic console session investigation", "priority": "low"})
                 assert investigation["created_by"] == prefix + "-analyst"
                 expect(403, "/behaviour/settings", method="PATCH", csrf=session["csrf_token"], payload={"anomaly_threshold": 71})
+                expect(403, "/detections/DET-AUTH-001", method="PATCH", csrf=session["csrf_token"], payload={"enabled": False})
+                expect(403, "/intelligence/sources/intel-local-review", method="PATCH", csrf=session["csrf_token"], payload={"enabled": False})
+                # Seed one uniquely labelled synthetic event through the collector boundary.
+                event_id = "evt_session_workflow_" + secrets.token_hex(12)
+                event = {"event_id": event_id, "timestamp": datetime.now(timezone.utc).isoformat(),
+                         "source": {"type": "network", "collector": prefix + "-collector"},
+                         "event": {"category": "network", "action": "connection", "outcome": "success"},
+                         "labels": {"environment": "lab", "scenario": prefix}}
+                req = Request(GATEWAY + "/api/v1/telemetry", method="POST", data=json.dumps(event).encode(),
+                              headers={"Content-Type": "application/json", "Authorization": "Bearer " + tokens["collector"]})
+                with urlopen(req, timeout=10) as response:
+                    assert response.status == 202
+                hunt, _ = expect(201, "/hunts", method="POST", csrf=session["csrf_token"], payload={
+                    "name": prefix + " authenticated hunt", "hypothesis": "Review the isolated synthetic session event",
+                    "query": {"labels": {"scenario": prefix}, "limit": 5}})
+                assert hunt["created_by"] == prefix + "-analyst"
+                for _ in range(30):
+                    result, _ = expect(200, "/hunts/" + hunt["id"] + "/run", method="POST", csrf=session["csrf_token"], payload={"override": {}})
+                    if result["result_count"] == 1:
+                        break
+                    time.sleep(0.2)
+                else:
+                    raise AssertionError("authenticated hunt did not find its synthetic event")
+                assert result["events"][0]["id"] == event_id
+                run_history, _ = expect(200, "/hunts/" + hunt["id"] + "/runs")
+                assert any(item["actor_id"] == prefix + "-analyst" and item["id"] == result["run_id"] for item in run_history["runs"])
+                case = "/investigations/" + investigation["id"]
+                expect(200, case + "/hunt-runs/" + str(result["run_id"]), method="POST", csrf=session["csrf_token"])
+                note, _ = expect(201, case + "/notes", method="POST", csrf=session["csrf_token"], payload={"body": "Reviewed isolated synthetic hunt evidence."})
+                assert note["notes"][0]["actor_id"] == prefix + "-analyst"
+                expect(200, case + "/status", method="PATCH", csrf=session["csrf_token"], payload={"status": "investigating"})
+                detail, _ = expect(200, case)
+                assert detail["status"] == "investigating" and detail["events"][0]["id"] == event_id
+                assert {"event", "note", "audit"}.issubset({item["type"] for item in detail["timeline"]})
+                assert all(item["actor_id"] == prefix + "-analyst" for item in detail["audit"])
                 with browser.open(CONSOLE + "/investigations", timeout=10) as page:
                     assert (prefix + "-analyst") in page.read().decode()
                 # Restarting a gateway must preserve active database sessions and re-check its registry.
@@ -143,9 +179,13 @@ def main() -> None:
                 # Privileged cookies carry the same role limits as bearer requests.
                 admin = login("administrator")
                 expect(400, "/behaviour/settings", method="PATCH", csrf=admin["csrf_token"], payload={"anomaly_threshold": 0})
+                # Exercise a valid privileged mutation without changing the shared lab threshold.
+                settings, _ = expect(200, "/behaviour/settings")
+                settings, _ = expect(200, "/behaviour/settings", method="PATCH", csrf=admin["csrf_token"], payload={"anomaly_threshold": settings["anomaly_threshold"]})
+                assert settings["updated_by"] == prefix + "-administrator"
                 expect(200, "/auth/logout", method="POST", csrf=admin["csrf_token"])
                 assert not any(token in (private / "gateway.log").read_text() for token in tokens.values())
-                print("Console session smoke passed: sign-in, role checks, CSRF, persisted audit actor, gateway restart, rotation, logout replay and idle expiry.", flush=True)
+                print("Console session smoke passed: sign-in, role checks, authenticated hunt/evidence/note/timeline workflows, verified audit actors, administrator mutation, CSRF, gateway restart, rotation, logout replay and idle expiry.", flush=True)
                 if args.keep_running:
                     print("Browser QA fixture: " + CONSOLE + "/sign-in", flush=True)
                     while True:

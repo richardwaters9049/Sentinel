@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
+import { AdministrationNotice, useCanAdminister } from "@/components/sentinel/console-access";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -48,6 +49,7 @@ function classification(indicator: IntelligenceIndicator) {
 }
 
 export default function IntelligenceWorkspace() {
+  const canAdminister = useCanAdminister();
   const [metrics, setMetrics] = useState<IntelligenceMetrics | null>(null);
   const [indicators, setIndicators] = useState<IntelligenceIndicator[]>([]);
   const [matches, setMatches] = useState<EventEnrichment[]>([]);
@@ -131,6 +133,7 @@ export default function IntelligenceWorkspace() {
   }, [matches]);
 
   async function toggleSource(source: IntelligenceSource) {
+    if (!canAdminister) return;
     setBusySourceID(source.id);
     setError("");
     try {
@@ -371,6 +374,7 @@ export default function IntelligenceWorkspace() {
                     confidence and preserves the provenance used when a match is
                     recorded.
                   </div>
+                  <AdministrationNotice id="intelligence-access" action="enable or disable intelligence sources" />
                   {sources.map((source) => (
                     <div
                       key={source.id}
@@ -388,7 +392,8 @@ export default function IntelligenceWorkspace() {
                         </div>
                         <Switch
                           checked={source.active}
-                          disabled={busySourceID === source.id}
+                          disabled={!canAdminister || busySourceID === source.id}
+                          aria-describedby={!canAdminister ? "intelligence-access" : undefined}
                           onCheckedChange={() => void toggleSource(source)}
                           aria-label={
                             (source.active ? "Disable " : "Enable ") + source.name

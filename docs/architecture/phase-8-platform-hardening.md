@@ -4,7 +4,8 @@
 
 In progress. The first slice establishes API credential authentication, explicit RBAC
 and verified audit attribution. Interactive console sign-in and PostgreSQL-backed secure
-sessions are now implemented. Phase Seven remains complete within its simulated scope.
+sessions are now implemented, with role-aware privileged controls and authenticated
+analyst workflow verification. Phase Seven remains complete within its simulated scope.
 
 ## API access boundary
 
@@ -173,9 +174,35 @@ production build; both isolated Phase Eight smokes; and the full Phase Seven fin
 regression with the inherited Phase One–Six baseline. The local console and gateway
 were restarted in required mode with privately provisioned eight-hour lab credentials.
 
-## Remaining work
+## Role-aware console slice
 
-- Role-aware console controls and end-to-end authenticated analyst workflows.
+Detection enable/disable switches, intelligence-source switches and the anomaly-threshold
+slider/apply action now use the server-verified session role. Analysts retain read access
+and investigation/hunt actions; privileged controls are disabled with accessible explanations.
+Administrators can edit configuration. Missing access context denies privileged UI actions;
+legacy local compatibility is an explicit server-layout choice. The session expiry boundary
+hides the workspace, and current CSRF/session context is obtained before each mutation.
+
+UI capability checks support usability, not authorisation. The browser remains untrusted;
+the gateway continues to check every route and ignores client role/actor claims. No new
+trust boundary, role permission or database schema is introduced. An already rendered
+page can show a stale role after a session is replaced in another tab; current gateway
+permissions still apply and refreshing the page obtains the new verified role.
+
+Verification on 9 October 2026 includes thirteen console tests, lint, TypeScript checking
+and a production build. The expanded required-mode session smoke seeds a uniquely labelled
+collector event, creates/runs a saved hunt, attaches its exact results to an investigation,
+adds a note, changes case status and checks the timeline and persisted audit actors. It
+also checks analyst denials for all three administrative actions and performs a valid
+administrator threshold update using its existing value. Synthetic hunts, events, cases
+and audits are retained; only test session records and private/runtime fixtures are cleaned.
+
+Isolated browser QA verified disabled analyst controls in all three workspaces, administrator
+controls including keyboard threshold editing, analyst investigation-note persistence,
+verified navigation roles and sign-out. Browser QA leaves shared detection/source/threshold
+values unchanged; it adds a synthetic investigation note.
+
+## Remaining work
 - Rate limiting and a durable access-audit retention policy.
 - Signed collector provenance and additional replay controls.
 - Dependency/container/code/secret scanning, SBOM and deployment security controls.

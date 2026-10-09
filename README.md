@@ -31,7 +31,7 @@ Synthetic events → Go gateway → NATS JetStream → persistence and detection
 
 ## Current status
 
-Phases 0–7 are complete within the simulated lab scope. **Phase 8 platform hardening is underway**, with API authentication, role checks and secure console sessions implemented. Further work includes role-aware console controls, rate limiting, collector provenance and security scanning.
+Phases 0–7 are complete within the simulated lab scope. **Phase 8 platform hardening is underway**, with API authentication, role-aware controls and secure console sessions implemented. Further work includes rate limiting, collector provenance and security scanning.
 
 Behavioural analytics supplement deterministic detections. Their synthetic evaluations expose known coverage limitations; model scores are supporting evidence, not proof of compromise or production detection accuracy. Progress and verification are recorded in the [development roadmap](docs/ROADMAP.md).
 

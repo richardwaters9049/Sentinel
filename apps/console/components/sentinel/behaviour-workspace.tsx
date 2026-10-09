@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import BehaviourCataloguePanel from "@/components/sentinel/behaviour-catalogue";
 import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
+import { AdministrationNotice, useCanAdminister } from "@/components/sentinel/console-access";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -59,6 +60,7 @@ function severityClass(severity: BehaviourScore["severity"]) {
 }
 
 export default function BehaviourWorkspace() {
+  const canAdminister = useCanAdminister();
   const [monitor, setMonitor] = useState<BehaviourMonitor | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [entity, setEntity] = useState<BehaviourEntityFilter>();
@@ -94,6 +96,7 @@ export default function BehaviourWorkspace() {
   }
 
   async function saveThreshold() {
+    if (!canAdminister) return;
     setSavingThreshold(true);
     setError("");
     try {
@@ -338,6 +341,8 @@ export default function BehaviourWorkspace() {
                   </div>
                   <input
                     type="range"
+                    disabled={!canAdminister || settings === null || savingThreshold}
+                    aria-describedby={!canAdminister ? "behaviour-access" : undefined}
                     min={1}
                     max={99}
                     value={thresholdDraft}
@@ -350,11 +355,13 @@ export default function BehaviourWorkspace() {
                     <span>{activeModel?.feature_schema.length ?? 0} features</span>
                     <span>seed {activeModel?.random_seed ?? 707}</span>
                   </div>
+                  <AdministrationNotice id="behaviour-access" action="change the anomaly threshold" />
                 </div>
                 <Button
                   type="button"
                   onClick={() => void saveThreshold()}
-                  disabled={!thresholdChanged || savingThreshold}
+                  disabled={!canAdminister || !thresholdChanged || savingThreshold}
+                  aria-describedby={!canAdminister ? "behaviour-access" : undefined}
                   className="cursor-pointer bg-violet-300 text-slate-950 hover:bg-violet-200 disabled:cursor-not-allowed"
                 >
                   <Save className="mr-2 size-3.5" />

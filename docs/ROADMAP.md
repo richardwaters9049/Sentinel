@@ -41,11 +41,11 @@ all twelve changed cases in the catalogue evaluation; see the
 
 Implemented: short-lived lab credentials, server-side role checks, verified audit actors,
 local development compatibility, interactive sign-in and bounded/revocable sessions
-with HttpOnly cookies, origin checks and CSRF protection.
+with HttpOnly cookies, origin checks and CSRF protection. Role-aware privileged console
+controls and authenticated hunt/investigation workflow checks are also implemented.
 
 Outstanding work includes:
 
-- Role-aware console controls and authenticated analyst workflow coverage.
 - Rate limiting and durable access-audit retention.
 - Signed collector provenance and additional replay controls.
 - Dependency, container, code and secret scanning; SBOM and deployment controls.

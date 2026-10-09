@@ -1,12 +1,12 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type ConsoleSession, sentinelFetch } from "@/lib/sentinel/session";
 
-const SessionContext = createContext<ConsoleSession | null>(null);
-export function useConsoleSession() { return useContext(SessionContext); }
+import { ConsoleAccessProvider, useConsoleSession } from "./console-access";
+export { useConsoleSession } from "./console-access";
 
-export default function SessionProvider({ session, children }: { session: ConsoleSession | null; children: React.ReactNode }) {
+export default function SessionProvider({ session, development = false, children }: { session: ConsoleSession | null; development?: boolean; children: React.ReactNode }) {
   const router = useRouter();
   const [expired, setExpired] = useState(false);
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function SessionProvider({ session, children }: { session: Consol
     return () => { window.removeEventListener("sentinel-session-expired", expire); window.clearTimeout(timer); };
   }, [session, router]);
   if (expired) return <main className="p-8" role="status">Your session has expired. Opening sign-in…</main>;
-  return <SessionContext value={session}>{children}</SessionContext>;
+  return <ConsoleAccessProvider session={session} development={development}>{children}</ConsoleAccessProvider>;
 }
 
 export function SessionControl() {

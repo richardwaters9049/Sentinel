@@ -55,4 +55,6 @@ credential file, configured gateway and database remain trusted.
 
 Development compatibility is explicit in local production-preview smoke tests. Production
 console mode defaults to required; invalid mode configuration fails rather than bypassing
-sign-in. Console UI permissions remain a usability follow-up; the gateway is authoritative.
+sign-in. Role-aware console controls use the server-verified principal for usability;
+the gateway remains authoritative for every action. Missing context denies privileged
+controls, and local compatibility access is an explicit server-layout choice.

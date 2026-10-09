@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import SentinelBrand from "@/components/sentinel/brand";
 import SidebarDrawer from "@/components/sentinel/sidebar-drawer";
+import { AdministrationNotice, useCanAdminister } from "@/components/sentinel/console-access";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,7 @@ function safetyNote(detection: DetectionRecord) {
 }
 
 export default function DetectionsWorkspace() {
+  const canAdminister = useCanAdminister();
   const [detections, setDetections] = useState<DetectionRecord[]>([]);
   const [metrics, setMetrics] = useState<DetectionMetric[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +123,7 @@ export default function DetectionsWorkspace() {
   }, []);
 
   async function toggleDetection(detection: DetectionRecord) {
+    if (!canAdminister) return;
     setBusyID(detection.id);
     setError("");
 
@@ -276,6 +279,7 @@ export default function DetectionsWorkspace() {
             })}
           </section>
 
+          <AdministrationNotice id="detection-access" action="enable or disable detection rules" />
           <section className="grid gap-4">
             {loading && detections.length === 0 ? (
               <div
@@ -386,7 +390,8 @@ export default function DetectionsWorkspace() {
                           </div>
                           <Switch
                             checked={detection.enabled}
-                            disabled={busyID === detection.id}
+                            disabled={!canAdminister || busyID === detection.id}
+                            aria-describedby={!canAdminister ? "detection-access" : undefined}
                             onCheckedChange={() => void toggleDetection(detection)}
                             aria-label={
                               (detection.enabled ? "Disable " : "Enable ") +
