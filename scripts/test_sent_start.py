@@ -3,6 +3,8 @@ import argparse
 import importlib.machinery
 import importlib.util
 import json
+import io
+import threading
 from pathlib import Path
 import socket
 import tempfile
@@ -163,6 +165,73 @@ class LauncherTests(unittest.TestCase):
     def test_http_failure_is_not_ready(self):
         with patch.object(launcher, "urlopen", side_effect=launcher.URLError("offline")):
             self.assertFalse(launcher.http_ready("http://127.0.0.1:8090/health"))
+
+
+class TerminalUITests(unittest.TestCase):
+    class TTY(io.StringIO):
+        def isatty(self):
+            return True
+
+    def test_redirected_plain_and_dumb_output_have_no_terminal_controls(self):
+        for stream, options, environment in (
+            (io.StringIO(), {}, {"TERM": "xterm-256color"}),
+            (self.TTY(), {"plain": True}, {"TERM": "xterm-256color"}),
+            (self.TTY(), {}, {"TERM": "dumb"}),
+        ):
+            with self.subTest(options=options, environment=environment), \
+                 patch.dict(launcher.os.environ, environment, clear=True):
+                ui = launcher.TerminalUI(stream=stream, **options)
+                ui.banner()
+                with ui.activity("Build gateway"):
+                    pass
+                self.assertFalse(ui.animate)
+                self.assertNotIn("\033", stream.getvalue())
+                self.assertNotIn("\r", stream.getvalue())
+                self.assertIn("DONE", stream.getvalue())
+
+    def test_colour_and_motion_preferences_are_independent(self):
+        with patch.dict(launcher.os.environ, {"TERM": "xterm-256color"}, clear=True):
+            ui = launcher.TerminalUI(stream=self.TTY(), no_animation=True)
+            self.assertTrue(ui.colour)
+            self.assertFalse(ui.animate)
+            self.assertIn("\033[", ui.style("Sentinel", "96"))
+        with patch.dict(launcher.os.environ, {"TERM": "xterm-256color", "NO_COLOR": ""}, clear=True):
+            ui = launcher.TerminalUI(stream=self.TTY())
+            self.assertFalse(ui.colour)
+            self.assertEqual(ui.style("Sentinel", "96"), "Sentinel")
+
+    def test_spinner_stops_and_clears_on_success_failure_and_interrupt(self):
+        for error, status in ((None, "DONE"), (ValueError("test"), "FAILED"),
+                              (KeyboardInterrupt(), "CANCELLED")):
+            with self.subTest(status=status), \
+                 patch.dict(launcher.os.environ, {"TERM": "xterm-256color"}, clear=True):
+                stream = self.TTY()
+                ui = launcher.TerminalUI(stream=stream)
+                before = set(threading.enumerate())
+                def activity():
+                    with ui.activity("Wait for gateway"):
+                        if error is not None:
+                            raise error
+                if error is None:
+                    activity()
+                else:
+                    with self.assertRaises(type(error)):
+                        activity()
+                self.assertEqual(set(threading.enumerate()), before)
+                self.assertIn("\r\033[2K", stream.getvalue())
+                self.assertIn(status, stream.getvalue())
+                self.assertTrue(stream.getvalue().endswith("\n"))
+
+    def test_ready_summary_keeps_machine_readable_paths_and_urls(self):
+        stream = io.StringIO()
+        ui = launcher.TerminalUI(stream=stream)
+        ui.ready("http://127.0.0.1:3001", "http://127.0.0.1:8081",
+                 {"token_file_path": "/private/tokens.json", "expires_at": "test-expiry"},
+                 Path("/private/run"))
+        output = stream.getvalue()
+        self.assertIn("Sentinel is ready: http://127.0.0.1:3001/sign-in", output)
+        self.assertIn("Credential file: /private/tokens.json", output)
+        self.assertNotIn("\033", output)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,11 @@ installs locked frontend dependencies, builds the gateway, provisions private ei
 lab credentials, and starts the authenticated gateway and console. It waits for readiness
 before opening the sign-in page and prints the credential-file path, never the credential.
 
+Interactive terminals show a cyan/violet banner, animated progress indicators, timed
+startup steps and a ready summary. Redirected output stays plain. Use `--no-animation`
+to keep colour with static progress, or `--plain` to disable both. The `NO_COLOR`
+environment variable disables colour; `TERM=dumb` disables colour and animation.
+
 Keep the terminal open. Ctrl-C stops only the gateway and console started by this launcher;
 Docker dependencies and the PostgreSQL volume remain available. The launcher prefers
 3000 and 8080, skips occupied ports, and prints the selected console and gateway URLs.
