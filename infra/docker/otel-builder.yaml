@@ -1,0 +1,13 @@
+dist:
+  module: sentinel.local/otel
+  name: sentinel-otel
+  description: Sentinel bounded OTLP receiver and rotating file exporter
+  version: 0.162.0
+  output_path: /build/collector
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.162.0
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.162.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.162.0
+exporters:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter v0.162.0

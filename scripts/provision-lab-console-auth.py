@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from lab_signing import keypair
 
 
 def main() -> None:
@@ -18,7 +19,9 @@ def main() -> None:
     manifest = [{"subject": "lab-" + role, "role": role,
                  "token_sha256": hashlib.sha256(token.encode()).hexdigest(), "expires_at": expires}
                 for role, token in tokens.items()]
-    for name, value in (("credentials.json", manifest), ("lab-tokens.json", {"expires_at": expires, "tokens": tokens})):
+    seed, public = keypair()
+    manifest[2]["collector_public_key"] = public
+    for name, value in (("credentials.json", manifest), ("lab-tokens.json", {"expires_at": expires, "tokens": tokens, "collector_private_seed": seed})):
         descriptor = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w") as output:
             json.dump(value, output, indent=2)

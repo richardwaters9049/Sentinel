@@ -3,15 +3,15 @@
 Sentinel is a local synthetic lab. Use the exact console origin printed by the launcher
 (or `http://127.0.0.1:3000` for manual startup); `localhost` is a different origin for sign-in checks.
 The gateway and console bind to loopback by default. Compose publishes database,
-NATS and ML ports, so run the lab on a controlled host/network and do not expose it
+NATS and ML ports on loopback, so run the lab on a controlled host/network and do not expose it
 through public tunnels or proxies.
 
 ## Prerequisites
 
-- Go 1.27.1, matching the Go modules.
+- Go 1.27.2, matching the Go modules.
 - Bun 1.3.14, matching the console package manager.
 - Docker with Compose, with its daemon running.
-- Python 3 for provisioning and Phase Eight smoke scripts.
+- Python 3 and OpenSSL with Ed25519 support for private lab provisioning and signed requests.
 
 Python 3.12 and the pinned ML dependencies are supplied by the ML container.
 Configuration placeholders live in [the root example](../.env.example) and
@@ -155,3 +155,20 @@ Stop foreground gateway/console processes with Ctrl-C. From
 `/Users/richy/Documents/Github/Sentinel`, `make dev-down` stops Compose services while
 preserving the named PostgreSQL volume. Do not remove that volume casually: it contains
 synthetic events, findings, investigations and audit evidence.
+
+## Signed synthetic ingestion
+
+From `/Users/richy/Documents/Github/Sentinel`, use the private token-file path printed
+by provisioning or the launcher:
+
+```bash
+cd /Users/richy/Documents/Github/Sentinel
+(cd simulator && go run ./cmd/sentinel-sim -credential-file /absolute/path/to/lab-tokens.json -scenario auth-burst)
+```
+
+Add `-url` when the launcher selected another gateway port. Required-mode collectors
+need an Ed25519 signature and expiring bearer credential on every request. The CLI
+reads a private file and signs exact request bytes; it never prints credential material.
+Unsigned `make simulator-run` remains a legacy development-mode workflow.
+See [collector trust](adr/0007-collector-signatures-and-access-ledger.md) and
+[deployment operations](architecture/phase-9-deployment.md).

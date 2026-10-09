@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// This is synthetic identity metadata, not a cloud credential document.
+const simulatedServiceAccount = "service_account"
+
 type acceptedEvent struct {
 	Accepted bool   `json:"accepted"`
 	EventID  string `json:"event_id"`
@@ -19,22 +22,41 @@ type acceptedEvent struct {
 
 func main() {
 	var (
-		baseURL  = flag.String("url", "http://127.0.0.1:8080", "Sentinel gateway base URL")
-		scenario = flag.String("scenario", "auth-burst", "synthetic scenario to emit")
-		delay    = flag.Duration("delay", 250*time.Millisecond, "delay between events")
+		at          = flag.String("at", "", "optional RFC3339 event time for reproducible synthetic replay")
+		credentials = flag.String("credential-file", "", "private lab collector credential file")
+		baseURL     = flag.String("url", "http://127.0.0.1:8080", "Sentinel gateway base URL")
+		scenario    = flag.String("scenario", "auth-burst", "synthetic scenario to emit")
+		delay       = flag.Duration("delay", 250*time.Millisecond, "delay between events")
 	)
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	events, err := scenarioEvents(*scenario, time.Now().UTC())
+	start := time.Now().UTC()
+	if *at != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, *at)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "invalid -at: expected RFC3339 event time")
+			os.Exit(2)
+		}
+		start = parsed.UTC()
+	}
+	events, err := scenarioEvents(*scenario, start)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	if *credentials != "" {
+		transport, err := collectorTransport(*credentials)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		client.Transport = transport
+	}
 	for i, event := range events {
 		eventID, err := postEvent(ctx, client, *baseURL, event)
 		if err != nil {
@@ -201,7 +223,7 @@ func serviceAccountLoginEvent(timestamp time.Time) map[string]interface{} {
 		},
 		"actor": map[string]interface{}{
 			"id":   "svc-backup",
-			"type": "service_account",
+			"type": simulatedServiceAccount,
 			"name": "Backup Service",
 		},
 		"event": map[string]interface{}{
@@ -668,7 +690,7 @@ func behaviourAnomalyEvent(timestamp time.Time) map[string]interface{} {
 		},
 		"actor": map[string]interface{}{
 			"id":   "svc-behaviour-anomaly",
-			"type": "service_account",
+			"type": simulatedServiceAccount,
 			"name": "Behaviour Anomaly Service",
 		},
 		"event": map[string]interface{}{

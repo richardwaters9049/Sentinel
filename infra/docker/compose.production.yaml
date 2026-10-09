@@ -1,0 +1,153 @@
+name: sentinel-production
+x-runtime: &runtime
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+  networks: [backend]
+services:
+  secrets-init:
+    image: alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+    user: "0:0"
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    volumes:
+      - ${SENTINEL_DEPLOY_SECRETS_DIR:?Provision private deployment secrets first}:/input:ro
+      - secrets:/output
+      - traces:/traces
+      - nats:/nats
+      - postgres:/postgresdata
+      - postgres-secrets:/postgres-secrets
+    command: [sh, -ec, 'cp /input/credentials.json /input/database-url /input/metrics-token /input/grafana-password /output/; chmod 700 /output; chmod 400 /output/*; chown -R 10001:10001 /output /traces /nats; cp /input/postgres-password /postgres-secrets/; chmod 400 /postgres-secrets/postgres-password; chown -R 70:70 /postgres-secrets /postgresdata']
+  postgres:
+    <<: *runtime
+    user: "70:70"
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m", "/var/run/postgresql:rw,nosuid,size=16m,uid=70,gid=70"]
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+    build: {context: ., dockerfile: Dockerfile.postgres}
+    image: sentinel-postgres:phase9
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - postgres-secrets:/run/secrets:ro
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U sentinel -d sentinel]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  nats:
+    <<: *runtime
+    build: {context: ., dockerfile: Dockerfile.nats}
+    image: sentinel-nats:phase9
+    user: "10001:10001"
+    command: [-js, -sd, /data, -m, '8222']
+    volumes: [nats:/data]
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+  ml:
+    <<: *runtime
+    build: ../../services/ml
+    image: sentinel-ml:phase9
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+  gateway:
+    <<: *runtime
+    build:
+      context: ../../services/gateway
+      args:
+        VERSION: ${SENTINEL_BUILD_VERSION:-development}
+    image: sentinel-gateway:phase9
+    environment:
+      SENTINEL_ENV: production
+      SENTINEL_AUTH_MODE: required
+      SENTINEL_AUTH_CREDENTIALS_FILE: /run/sentinel/credentials.json
+      DATABASE_URL_FILE: /run/sentinel/database-url
+      NATS_URL: nats://nats:4222
+      SENTINEL_ML_URL: http://ml:8090
+      SENTINEL_BEHAVIOUR_ENABLED: 'true'
+      SENTINEL_HTTP_ADDR: 0.0.0.0:8080
+      SENTINEL_CONSOLE_ORIGIN: ${SENTINEL_CONSOLE_ORIGIN:-http://127.0.0.1:13006}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+    volumes: [secrets:/run/sentinel:ro]
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+      ml: {condition: service_started}
+  console:
+    <<: *runtime
+    build: ../../apps/console
+    image: sentinel-console:phase9
+    environment:
+      SENTINEL_GATEWAY_URL: http://gateway:8080
+      SENTINEL_CONSOLE_ORIGIN: ${SENTINEL_CONSOLE_ORIGIN:-http://127.0.0.1:13006}
+    ports: ['127.0.0.1:13006:3000']
+    depends_on: [gateway]
+    networks: [backend, edge]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m", "/app/.next/cache:rw,nosuid,size=64m,uid=10001,gid=10001"]
+  otel:
+    <<: *runtime
+    build: {context: ., dockerfile: Dockerfile.otel}
+    image: sentinel-otel:phase9
+    user: '10001:10001'
+    command: [--config=/etc/otel/config.yaml]
+    volumes:
+      - ../monitoring/otel.yaml:/etc/otel/config.yaml:ro
+      - traces:/var/lib/otel
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+  prometheus:
+    <<: *runtime
+    build: {context: ., dockerfile: Dockerfile.prometheus}
+    image: sentinel-prometheus:phase9
+    user: '10001:10001'
+    command: [--config.file=/etc/prometheus/prometheus.yaml, --storage.tsdb.path=/tmp/prometheus, --storage.tsdb.retention.time=24h]
+    volumes:
+      - ../monitoring/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ../monitoring/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - secrets:/run/sentinel:ro
+    ports: ['127.0.0.1:13090:9090']
+    networks: [backend, edge]
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+  grafana:
+    <<: *runtime
+    build: {context: ., dockerfile: Dockerfile.grafana}
+    image: sentinel-grafana:phase9
+    user: '10001:10001'
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/sentinel/grafana-password
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: prometheus
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: 'false'
+      GF_PATHS_DATA: /tmp/grafana
+      GF_PATHS_LOGS: /tmp/logs
+      GF_PATHS_PLUGINS: /tmp/plugins
+    volumes:
+      - ../monitoring/grafana:/etc/grafana/provisioning:ro
+      - secrets:/run/sentinel:ro
+    ports: ['127.0.0.1:13000:3000']
+    networks: [backend, edge]
+    depends_on:
+      secrets-init: {condition: service_completed_successfully}
+networks:
+  backend: {internal: true}
+  edge: {}
+volumes:
+  postgres: {}
+  nats: {}
+  secrets: {}
+  postgres-secrets: {}
+  traces: {}

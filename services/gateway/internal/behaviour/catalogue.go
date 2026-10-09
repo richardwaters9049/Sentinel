@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/observability"
 	"io"
 	"math"
 	"net/http"
@@ -118,6 +119,9 @@ func (c *Client) Catalogue(ctx context.Context) (Catalogue, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/catalogue", nil)
 	if err != nil {
 		return Catalogue{}, fmt.Errorf("create catalogue request: %w", err)
+	}
+	if parent := observability.Header(ctx); parent != "" {
+		request.Header.Set("traceparent", parent)
 	}
 	response, err := c.client.Do(request)
 	if err != nil {

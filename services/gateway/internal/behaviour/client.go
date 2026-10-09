@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/observability"
 )
 
 const maxResponseBytes int64 = 1 << 20
@@ -66,6 +68,9 @@ func (c *Client) Score(ctx context.Context, request ScoreRequest) (Score, error)
 		return Score{}, fmt.Errorf("create behaviour score request: %w", err)
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
+	if parent := observability.Header(ctx); parent != "" {
+		httpRequest.Header.Set("traceparent", parent)
+	}
 
 	response, err := c.client.Do(httpRequest)
 	if err != nil {

@@ -2,10 +2,11 @@
 
 ## Status
 
-In progress. The first slice establishes API credential authentication, explicit RBAC
-and verified audit attribution. Interactive console sign-in and PostgreSQL-backed secure
-sessions are now implemented, with role-aware privileged controls and authenticated
-analyst workflow verification. Phase Seven remains complete within its simulated scope.
+Complete within the simulated lab scope on 9 October 2026. API credentials, RBAC,
+interactive console sessions, role-aware controls, signed collector provenance, durable
+replay protection, bounded rate limits and access-audit retention are implemented.
+The final regression and security gates passed; see the
+[completion evidence](phase-8-9-completion.md).
 
 ## API access boundary
 
@@ -49,7 +50,7 @@ challenge; insufficient permission returns 403. Protected responses use `no-stor
 Audit actors come from verified request context. Caller-supplied `X-Sentinel-Actor`
 and `X-Sentinel-Role` cannot spoof that context. Existing domain audit trails retain
 verified subjects. Denied access and mutation outcomes are structured log events; these
-logs are not yet a separately durable database access-audit ledger. Behavioural settings
+logs are now accompanied by the durable access ledger described below. Behavioural settings
 retain their existing latest-updater record rather than gaining a new history table.
 
 ## Development compatibility
@@ -202,10 +203,55 @@ controls including keyboard threshold editing, analyst investigation-note persis
 verified navigation roles and sign-out. Browser QA leaves shared detection/source/threshold
 values unchanged; it adds a synthetic investigation note.
 
-## Remaining work
-- Rate limiting and a durable access-audit retention policy.
-- Signed collector provenance and additional replay controls.
-- Dependency/container/code/secret scanning, SBOM and deployment security controls.
+## Final hardening slice
+
+Required mode now enforces token buckets before database work: peer requests allow
+300/second with a burst of 600; sign-in allows ten/minute with a burst of 20. Verified
+analyst/administrator principals allow 30/second with a burst of 60; collectors allow
+100/second with a burst of 200. Buckets are process-local, capped at 4096 entries and
+reclaim entries idle for five minutes. Capacity exhaustion denies new keys. No forwarded
+IP header grants a new peer identity. A shared console proxy intentionally shares its
+peer budget; per-principal budgets remain separate. HTTP timeouts/header/body bounds
+limit resource use. A 429 response includes Retry-After through the console proxy.
+
+Migration 0017 stores access receipt, verified allowance, denials and completions in
+PostgreSQL. Protected dispatch fails closed when receipt/allowance cannot be recorded.
+Records omit credentials, body/query data and IP addresses. Completion persistence
+failure is counted/logged and cannot roll back a finished domain transaction. Peer-rate
+rejections avoid database writes and remain visible in metrics and structured request
+logs. Read the ledger through administrator-only `GET /api/v1/security/audit`, using
+`limit` 1–200 and an exclusive `before` record-ID cursor. Invalid/duplicate query keys
+are rejected. Explicit administrator retention removes at most 1,000 access records
+older than 90 days; domain audits/evidence are preserved.
+
+Collector credentials additionally require a canonical unpadded-base64 Ed25519 public
+key in `collector_public_key` and a unique collector subject. Ingestion signs exact
+bytes, method, path, timestamp and nonce. Requests outside a 30-second allowance or
+with changed signatures, duplicate headers/query strings or replayed nonces fail.
+Nonce reservations are transactional and durable across restarts. Producer claims in
+`sentinel.collector.*` labels are replaced with verified subject, key digest and body
+digest. Up to 47 other labels fit the existing 50-label bound. Keep source metadata as
+reported context; a signed source can still provide false events if compromised.
+
+Private lab provisioning now creates the collector signing seed, and the simulator
+accepts `-credential-file` for authenticated synthetic scenarios. No signing secret is
+placed in source, the browser bundle, logs or the runtime principal registry. See
+[ADR 0007](../adr/0007-collector-signatures-and-access-ledger.md) for canonical signing
+bytes, retry behaviour, retention and trust assumptions.
+
+Security CI runs reachable Go vulnerability checks, Trivy runtime dependency/image,
+secret and deployment-policy scans, CycloneDX SBOM generation, and CodeQL for Go,
+TypeScript/JavaScript and Python. Security actions and deployment bases are pinned.
+Reachable Go standard-library issues were addressed by upgrading to Go 1.27.2;
+Starlette/FastAPI were upgraded and runtime images reduced. The shadcn generator is a
+build-time dependency, and unused npm tooling is removed from the standalone console
+runtime. An unfixed braces advisory remains in development tooling; runtime image and
+runtime-dependency gates do not suppress deployed HIGH/CRITICAL findings. GitHub code
+scanning execution/branch-protection enforcement depends on repository settings;
+local checks do not claim a completed hosted CodeQL run.
+
+The final gate is `make final-phase8`; production-shaped deployment verification and
+security scanning are described in [Phase Nine](phase-9-deployment.md).
 
 [ADR 0006](../adr/0006-console-sessions.md) describes interactive session choices.
 [ADR 0005](../adr/0005-api-authentication.md) records the trust assumptions and trade-offs.

@@ -1,4 +1,4 @@
-.PHONY: ml-catalogue-evaluate help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7 final-phase7 smoke-phase8 sessions-phase8 provision-lab-auth
+.PHONY: final-phase8 final-phase9 security-gate ml-catalogue-evaluate help dev-up dev-down dev-logs gateway-run gateway-test gateway-vet simulator-run simulator-test console-dev console-lint console-build ml-test ml-evaluate test fmt check smoke smoke-phase1 resilience-phase1 smoke-phase2 workflow-phase2 catalogue-phase2 quality-phase2 final-phase2 smoke-phase3 pivots-phase3 maturity-phase3 final-phase3 workflow-phase4 final-phase4 smoke-phase5 final-phase5 smoke-phase6 final-phase6 smoke-phase7 final-phase7 smoke-phase8 sessions-phase8 provision-lab-auth
 
 help:
 	@echo "Sentinel development commands"
@@ -176,3 +176,12 @@ sessions-phase8: console-build
 
 provision-lab-auth:
 	python3 scripts/provision-lab-console-auth.py
+
+final-phase8:
+	./scripts/phase8-final-regression.sh
+
+final-phase9:
+	python3 scripts/phase9-deployment-smoke.py --report /tmp/sentinel-phase9-report.json
+
+security-gate:
+	python3 scripts/security-gate.py --artifacts /tmp/sentinel-security-artifacts

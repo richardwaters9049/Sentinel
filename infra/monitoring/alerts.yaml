@@ -1,0 +1,21 @@
+groups:
+  - name: sentinel
+    rules:
+      - alert: SentinelGatewayUnavailable
+        expr: up{job="sentinel-gateway"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: 'Gateway unavailable or monitoring credential expired'}
+      - alert: SentinelAuditStorageFailure
+        expr: increase(sentinel_audit_failures_total[5m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: 'Protected requests are failing access-audit persistence'}
+      - alert: SentinelTraceDeliveryFailure
+        expr: increase(sentinel_trace_failures_total[5m]) + increase(sentinel_trace_dropped_total[5m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: 'Trace export is failing or its bounded queue is full'}
+      - alert: SentinelConsumerStalled
+        expr: sentinel_consumer_available == 0 or sentinel_consumer_pending > 100
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: 'Telemetry consumer unavailable or backlog accumulating'}

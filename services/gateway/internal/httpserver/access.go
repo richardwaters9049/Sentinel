@@ -93,12 +93,38 @@ func (s *Server) authorise(next http.Handler) http.Handler {
 			writeAPIError(w, http.StatusForbidden, "forbidden", "permission denied")
 			return
 		}
+		if s.operations != nil {
+			rate, burst := float64(30), float64(60)
+			if principal.Role == access.Collector {
+				rate = 100
+				burst = 200
+			}
+			if !s.limits.allow("subject:"+principal.Subject, rate, burst, time.Now()) {
+				s.operations.RateDenied.Add(1)
+				w.Header().Set("Retry-After", "1")
+				s.logAccess(r, pattern, principal, "rate_limited", 429)
+				writeAPIError(w, 429, "rate_limited", "principal request limit reached")
+				return
+			}
+			if principal.Role == access.Collector && r.URL.Path == "/api/v1/telemetry" {
+				var code string
+				var status int
+				r, code, status = s.requireCollector(r, principal)
+				if status != 0 {
+					s.logAccess(r, pattern, principal, code, status)
+					writeAPIError(w, status, code, "collector request could not be verified")
+					return
+				}
+			}
+			if !s.persistAccess(r, pattern, principal, "allowed", 0) {
+				writeAPIError(w, 503, "audit_unavailable", "security audit storage is unavailable")
+				return
+			}
+		}
 		r = r.WithContext(context.WithValue(r.Context(), principalKey{}, principal))
 		response := &auditResponse{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(response, r)
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			s.logAccess(r, pattern, principal, "completed", response.status)
-		}
+		s.logAccess(r, pattern, principal, "completed", response.status)
 	})
 }
 
@@ -113,6 +139,7 @@ func (w *auditResponse) WriteHeader(status int) {
 }
 
 func (s *Server) logAccess(r *http.Request, pattern string, principal access.Principal, outcome string, status int) {
+	s.persistAccess(r, pattern, principal, outcome, status)
 	if s.auditLogger != nil {
 		s.auditLogger.Info("API access decision", "method", r.Method, "route", pattern, "actor_id", principal.Subject,
 			"role", principal.Role, "outcome", outcome, "status", status)

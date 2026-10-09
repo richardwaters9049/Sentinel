@@ -1,0 +1,18 @@
+FROM golang:1.27.2-alpine@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS build
+ENV CGO_ENABLED=0 GOFLAGS=-p=2
+WORKDIR /src
+RUN wget -qO /tmp/source.tar.gz https://github.com/grafana/grafana/archive/6193dc03311b631b9727b560d24369e683dc396e.tar.gz && tar -xzf /tmp/source.tar.gz --strip-components=1
+RUN go build -tags oss -o /grafana ./pkg/cmd/grafana
+RUN go build -tags oss -ldflags="-X main.version=13.2.3 -X main.commit=6193dc03311b631b9727b560d24369e683dc396e -X main.buildBranch=sentinel" -o /grafana ./pkg/cmd/grafana
+WORKDIR /plugin
+ENV GOWORK=off
+RUN wget -qO /tmp/plugin.tar.gz https://github.com/grafana/grafana-prometheus-datasource/archive/99e3ef1c7190682ec950cb6c16144b06ff0fdbc3.tar.gz && tar -xzf /tmp/plugin.tar.gz --strip-components=1 && go get google.golang.org/grpc@v1.83.2 google.golang.org/genproto@v0.0.0-20260810153831-ec0a7760b754
+RUN go build -mod=mod -o /prometheus-plugin ./pkg
+FROM grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+ARG TARGETARCH
+USER 0:0
+# Rebuilding changes the upstream signature; trust only this operator-built plugin ID.
+RUN find /usr/share/grafana/data/plugins-bundled -mindepth 1 -maxdepth 1 ! -name prometheus -exec rm -rf {} + && rm -f /usr/share/grafana/data/plugins-bundled/prometheus/gpx_grafana-prometheus-datasource_* /usr/share/grafana/data/plugins-bundled/prometheus/MANIFEST.txt
+COPY --from=build /grafana /usr/share/grafana/bin/grafana
+COPY --from=build /prometheus-plugin /usr/share/grafana/data/plugins-bundled/prometheus/gpx_grafana-prometheus-datasource_linux_${TARGETARCH}
+USER 10001:10001

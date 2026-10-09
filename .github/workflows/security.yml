@@ -1,0 +1,75 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  dependencies-and-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: {go-version: '1.27.2'}
+      - name: Install verified Trivy release
+        run: |
+          curl --fail --location --output /tmp/trivy.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
+          curl --fail --location --output /tmp/checksums.txt https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_checksums.txt
+          python3 - <<'PY'
+          import hashlib
+          expected = next(line.split()[0] for line in open('/tmp/checksums.txt') if line.rstrip().endswith('trivy_0.75.0_Linux-64bit.tar.gz'))
+          assert hashlib.sha256(open('/tmp/trivy.tar.gz', 'rb').read()).hexdigest() == expected
+          PY
+          tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+      - name: Reachable Go vulnerabilities
+        working-directory: services/gateway
+        run: govulncheck ./...
+      - name: Simulator vulnerabilities
+        working-directory: simulator
+        run: govulncheck ./...
+      - name: Runtime dependencies, secrets and deployment policy
+        run: trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --exit-code 1 --skip-dirs apps/console/node_modules,apps/console/.next .
+      - name: Build runtime images
+        run: |
+          docker build --build-arg VERSION="${GITHUB_SHA}" -t sentinel-gateway:security services/gateway
+          docker build -t sentinel-console:security apps/console
+          docker build -t sentinel-ml:security services/ml
+          for service in nats postgres otel prometheus grafana; do
+            docker build -f "infra/docker/Dockerfile.${service}" -t "sentinel-${service}:security" infra/docker
+          done
+      - name: Scan images and generate SBOMs
+        run: |
+          mkdir -p security-artifacts
+          for service in gateway console ml nats postgres otel prometheus grafana; do
+            trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 "sentinel-${service}:security"
+            trivy image --format cyclonedx --output "security-artifacts/${service}.cdx.json" "sentinel-${service}:security"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runtime-sboms
+          path: security-artifacts
+          retention-days: 30
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: {go-version: '1.27.2'}
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from lab_signing import keypair, signature_headers
 import signal
 import subprocess
 import tempfile
@@ -58,6 +59,8 @@ def main() -> None:
         manifest = [{"subject": f"{prefix}-{role}", "role": role,
                      "token_sha256": hashlib.sha256(token.encode()).hexdigest(), "expires_at": expires}
                     for role, token in tokens.items()]
+        seed, public = keypair()
+        manifest[2]["collector_public_key"] = public
         file = private / "credentials.json"
         with os.fdopen(os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as output:
             json.dump(manifest, output)
@@ -128,8 +131,10 @@ def main() -> None:
                          "source": {"type": "network", "collector": prefix + "-collector"},
                          "event": {"category": "network", "action": "connection", "outcome": "success"},
                          "labels": {"environment": "lab", "scenario": prefix}}
-                req = Request(GATEWAY + "/api/v1/telemetry", method="POST", data=json.dumps(event).encode(),
-                              headers={"Content-Type": "application/json", "Authorization": "Bearer " + tokens["collector"]})
+                event_body = json.dumps(event).encode()
+                req = Request(GATEWAY + "/api/v1/telemetry", method="POST", data=event_body,
+                              headers={"Content-Type": "application/json", "Authorization": "Bearer " + tokens["collector"],
+                                       **signature_headers(seed, "POST", "/api/v1/telemetry", event_body)})
                 with urlopen(req, timeout=10) as response:
                     assert response.status == 202
                 hunt, _ = expect(201, "/hunts", method="POST", csrf=session["csrf_token"], payload={

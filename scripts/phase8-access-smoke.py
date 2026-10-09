@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from lab_signing import keypair, signature_headers
 import signal
 import subprocess
 import tempfile
@@ -33,6 +34,8 @@ def main() -> None:
         manifest = [{"subject": f"phase8-{role}", "role": role,
                      "token_sha256": hashlib.sha256(token.encode()).hexdigest(), "expires_at": expiry}
                     for role, token in tokens.items()]
+        seed, public = keypair()
+        manifest[2]["collector_public_key"] = public
         credential_file = private / "credentials.json"
         descriptor = os.open(credential_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w") as output:
@@ -52,6 +55,8 @@ def main() -> None:
             if role:
                 headers["Authorization"] = "Bearer " + tokens[role]
             data = json.dumps(payload).encode() if payload is not None else None
+            if role == "collector" and path == "/api/v1/telemetry":
+                headers.update(signature_headers(seed, method, path, data or b""))
             req = Request(BASE + path, data=data, headers=headers, method=method)
             try:
                 with urlopen(req, timeout=5) as response:
@@ -104,6 +109,27 @@ def main() -> None:
                     time.sleep(0.2)
                 else:
                     raise AssertionError("authenticated collector telemetry was not persisted")
+                # A captured signed request cannot be submitted twice, even after persistence.
+                replay_body = json.dumps({"event_id": event_id, "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "source": {"type": "network", "collector": "synthetic"},
+                    "event": {"category": "network", "action": "connection", "outcome": "success"}}).encode()
+                replay_headers = {"Content-Type": "application/json", "Authorization": "Bearer " + tokens["collector"],
+                                  **signature_headers(seed, "POST", "/api/v1/telemetry", replay_body)}
+                def replay(data: bytes) -> int:
+                    try:
+                        with urlopen(Request(BASE + "/api/v1/telemetry", data=data, headers=replay_headers, method="POST"), timeout=5) as response:
+                            return response.status
+                    except HTTPError as error:
+                        return error.code
+                assert replay(replay_body + b" ") == 401
+                assert replay(replay_body) == 202 and replay(replay_body) == 409
+                audit = expect(200, "/api/v1/security/audit?limit=200", "administrator")["records"]
+                assert any(row["outcome"] == "collector_replay" for row in audit)
+                assert any(row.get("subject") == "phase8-collector" and row["outcome"] == "completed" for row in audit)
+                assert not any(token in json.dumps(audit) for token in tokens.values())
+                expect(403, "/api/v1/security/audit", "analyst")
+                expect(400, "/api/v1/security/audit?limit=201", "administrator")
+                expect(200, "/api/v1/security/audit/retention", "administrator", "POST")
                 expect(403, "/api/v1/behaviour/settings", "analyst", "PATCH", {"anomaly_threshold": 71})
                 expect(403, "/api/v1/detections/DET-AUTH-001", "analyst", "PATCH", {"enabled": False})
                 expect(403, "/api/v1/intelligence/sources/local", "analyst", "PATCH", {"enabled": False})

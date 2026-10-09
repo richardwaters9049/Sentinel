@@ -31,7 +31,7 @@ Synthetic events → Go gateway → NATS JetStream → persistence and detection
 
 ## Current status
 
-Phases 0–7 are complete within the simulated lab scope. **Phase 8 platform hardening is underway**, with API authentication, role-aware controls and secure console sessions implemented. Further work includes rate limiting, collector provenance and security scanning.
+Phases 0–9 are complete within the simulated lab scope. Platform hardening includes secure sessions, role checks, signed collectors, replay protection, rate limits and durable access audits. The [deployment guide](docs/architecture/phase-9-deployment.md) covers hardened containers, monitoring, linked traces, recovery checks and a validated Kubernetes base.
 
 Behavioural analytics supplement deterministic detections. Their synthetic evaluations expose known coverage limitations; model scores are supporting evidence, not proof of compromise or production detection accuracy. Progress and verification are recorded in the [development roadmap](docs/ROADMAP.md).
 
@@ -39,7 +39,7 @@ Behavioural analytics supplement deterministic detections. Their synthetic evalu
 
 From `/Users/richy/Documents/Github/Sentinel`, run `./sent-start` to start the complete authenticated local lab. The launcher handles dependencies, private credentials and service readiness, then opens sign-in. Press Ctrl-C to stop its gateway and console.
 
-The local lab uses Go 1.27.1, Bun 1.3.14 and Docker Compose, with Python 3 for authentication provisioning and smoke scripts. The [local development guide](docs/LOCAL_DEVELOPMENT.md) covers installation, service startup, private lab credentials and checks.
+The local lab uses Go 1.27.2, Bun 1.3.14 and Docker Compose, with Python 3 for authentication provisioning and smoke scripts. The [local development guide](docs/LOCAL_DEVELOPMENT.md) covers installation, service startup, private lab credentials and checks.
 
 For architecture, event contracts, detection rules and engineering decisions, see the [project docs](docs/README.md).
 

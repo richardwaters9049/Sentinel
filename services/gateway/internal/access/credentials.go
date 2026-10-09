@@ -33,8 +33,9 @@ type Principal struct {
 
 type credential struct {
 	Principal
-	TokenSHA256 string `json:"token_sha256"`
-	digest      [32]byte
+	TokenSHA256        string `json:"token_sha256"`
+	CollectorPublicKey string `json:"collector_public_key,omitempty"`
+	digest             [32]byte
 }
 
 type Verifier struct{ credentials []credential }
@@ -81,6 +82,12 @@ func Parse(data []byte, now time.Time) (*Verifier, error) {
 	seen := make(map[string]bool)
 	for i := range entries {
 		c := &entries[i]
+		if c.CollectorPublicKey != "" {
+			key, err := base64.RawStdEncoding.Strict().DecodeString(c.CollectorPublicKey)
+			if err != nil || len(key) != 32 || c.Role != Collector {
+				return nil, errors.New("invalid collector public key")
+			}
+		}
 		if !subjectPattern.MatchString(c.Subject) || (c.Role != Analyst && c.Role != Administrator && c.Role != Collector) {
 			return nil, errors.New("invalid credential subject or role")
 		}

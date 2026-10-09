@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -25,6 +26,7 @@ const (
 )
 
 type Config struct {
+	OTLPEndpoint      string
 	ConsoleOrigin     string
 	Access            *access.Verifier
 	AuthMode          string
@@ -53,6 +55,30 @@ func Load() (Config, error) {
 		ShutdownTimeout:   getDurationEnv("SENTINEL_SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
 		ReadHeaderTimeout: getDurationEnv("SENTINEL_READ_HEADER_TIMEOUT", defaultReadHeaderTimeout),
 	}
+	if path := os.Getenv("DATABASE_URL_FILE"); path != "" {
+		if os.Getenv("DATABASE_URL") != "" {
+			return Config{}, fmt.Errorf("configure only one database URL source")
+		}
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+			return Config{}, fmt.Errorf("DATABASE_URL_FILE must be a private regular file")
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return Config{}, fmt.Errorf("database secret is unavailable")
+		}
+		opened, err := file.Stat()
+		if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() || opened.Mode().Perm()&0077 != 0 {
+			file.Close()
+			return Config{}, fmt.Errorf("database secret changed while opening")
+		}
+		raw, err := io.ReadAll(io.LimitReader(file, 4097))
+		file.Close()
+		if err != nil || len(raw) > 4096 || len(strings.TrimSpace(string(raw))) == 0 {
+			return Config{}, fmt.Errorf("invalid database secret")
+		}
+		cfg.DatabaseURL = strings.TrimSpace(string(raw))
+	}
 
 	cfg.ConsoleOrigin = getEnv("SENTINEL_CONSOLE_ORIGIN", "http://127.0.0.1:3000")
 	origin, err := url.Parse(cfg.ConsoleOrigin)
@@ -80,8 +106,18 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 		cfg.Access = verifier
+		if !verifier.CollectorsReady() {
+			return Config{}, fmt.Errorf("collector credentials require unique subjects and Ed25519 public keys")
+		}
 	default:
 		return Config{}, fmt.Errorf("unsupported SENTINEL_AUTH_MODE")
+	}
+	cfg.OTLPEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if cfg.OTLPEndpoint != "" {
+		endpoint, err := url.Parse(cfg.OTLPEndpoint)
+		if err != nil || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+			return Config{}, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must be an HTTP(S) origin")
+		}
 	}
 
 	if !strings.HasPrefix(cfg.HTTPAddr, ":") && !strings.Contains(cfg.HTTPAddr, ":") {

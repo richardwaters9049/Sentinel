@@ -1,7 +1,7 @@
 # Development roadmap
 
-Phases describe delivered vertical slices, not production certification. Phases 0–7
-are complete within the simulated lab scope; Phase 8 is in progress. The linked phase
+Phases describe delivered vertical slices, not production certification. Phases 0–9
+are complete within the simulated lab scope. The linked phase
 documents contain implementation details, contracts, limitations and exit criteria.
 This roadmap follows the implemented phase names: hunting and investigations are
 Phase 3, and the analyst console is Phase 4.
@@ -16,8 +16,8 @@ Phase 3, and the analyst console is Phase 4.
 | 5 — OT simulation | Fictional OT inventory, synthetic ICS-style events, boundary rules, coverage gaps and safety context | [Complete](architecture/phase-5-ot-simulation.md) |
 | 6 — Intelligence and enrichment | Local intel fixtures, IOC matching, confidence, provenance and enrichment workflows | [Complete](architecture/phase-6-intelligence-enrichment.md) |
 | 7 — Behavioural analytics | Python model, baselines/features, explanations, entity-scoped scores, distribution monitoring and governed evaluation | [Complete, simulated scope](architecture/phase-7-behavioural-analytics.md) |
-| 8 — Platform hardening | Authentication, RBAC, sessions, collector trust and security tooling | [In progress](architecture/phase-8-platform-hardening.md) |
-| 9 — Production-shaped deployment | Tracing/monitoring, measured load and failure tests, deployment documentation and eventual Kubernetes | Planned |
+| 8 — Platform hardening | Authentication, RBAC, sessions, collector trust and security tooling | [Complete, simulated scope](architecture/phase-8-platform-hardening.md) |
+| 9 — Production-shaped deployment | Tracing/monitoring, measured load and failure tests, container deployment and validated Kubernetes base | [Complete, local simulated scope](architecture/phase-9-deployment.md) |
 
 ## Completed milestone
 
@@ -37,21 +37,18 @@ coverage and review guidance. BA-001, BA-003 and BA-004 remain below threshold o
 all twelve changed cases in the catalogue evaluation; see the
 [Phase Seven completion evidence](architecture/phase-7-completion.md).
 
-## Current priority: Phase 8
+## Final milestones
 
-Implemented: short-lived lab credentials, server-side role checks, verified audit actors,
-local development compatibility, interactive sign-in and bounded/revocable sessions
-with HttpOnly cookies, origin checks and CSRF protection. Role-aware privileged console
-controls and authenticated hunt/investigation workflow checks are also implemented.
+Phase Eight adds signed collector provenance, durable nonce replay controls, bounded
+rate limiting, access-audit retention and security scanning to the existing API/session
+boundary. Phase Nine packages the local stack in hardened containers, connects metrics
+and HTTP traces, verifies recovery and backup restore, and supplies a validated
+Kubernetes base. See the [completion evidence](architecture/phase-8-9-completion.md).
 
-Outstanding work includes:
-
-- Rate limiting and durable access-audit retention.
-- Signed collector provenance and additional replay controls.
-- Dependency, container, code and secret scanning; SBOM and deployment controls.
-
-See [Phase Eight](architecture/phase-8-platform-hardening.md) for trust assumptions,
-verification and residual risk. Deployment complexity follows this hardening work.
+The planned phases are delivered. Subsequent work should be driven by an explicit
+deployment target or analytical requirement: central identity, shared multi-replica
+limits, authenticated/encrypted dependencies, hosted CI enforcement and improvement of
+the documented behavioural coverage gaps remain outside the completed lab scope.
 
 ## Verification gates
 
@@ -60,13 +57,16 @@ From `/Users/richy/Documents/Github/Sentinel`:
 ```bash
 cd /Users/richy/Documents/Github/Sentinel
 make final-phase7
-make smoke-phase8
-make sessions-phase8
+make final-phase8
+make final-phase9
+make security-gate
 ```
 
 `final-phase7` combines the inherited Phase One–Six baseline with behavioural model,
-API, persistence and monitoring checks. The Phase Eight gates exercise isolated
-required-mode API and console services. These commands build images/services and
+API, persistence and monitoring checks. The Phase Eight gate exercises isolated
+required-mode API and console services. Phase Nine uses disposable credentials,
+containers and volumes; security scanning produces eight runtime SBOMs outside the
+repository. It needs Trivy 0.75.0 and govulncheck 1.8.0 on PATH. These commands build images/services and
 use local PostgreSQL; their synthetic investigation evidence is retained. Check the
 linked phase documents for ports and prerequisites before running alongside a lab.
 The Phase Seven gate requires exclusive gateway/NATS workers and cycles local

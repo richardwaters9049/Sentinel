@@ -146,8 +146,17 @@ for case in validation["profiles"]:
         assert case["changed_flagged"]==12
 PYTEST
 
+# Business-hour reference: this fixture should not change classification with the host clock.
+NORMAL_AT="$(python3 - <<'PYTIME'
+from datetime import datetime, timedelta, timezone
+stamp = datetime.now(timezone.utc).replace(hour=10, minute=30)
+while stamp.weekday() >= 5:
+    stamp -= timedelta(days=1)
+print(stamp.isoformat())
+PYTIME
+)"
 echo "Submitting baseline-like behaviour..."
-"${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-normal   -delay 0s >/tmp/sentinel-phase7-normal.log
+"${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-normal -at "${NORMAL_AT}"   -delay 0s >/tmp/sentinel-phase7-normal.log
 
 echo "Submitting anomalous cross-zone behaviour..."
 "${SIM_BINARY}"   -url "http://127.0.0.1:${GATEWAY_PORT}"   -scenario behaviour-anomaly   -delay 0s >/tmp/sentinel-phase7-anomaly.log

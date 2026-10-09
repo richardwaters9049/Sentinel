@@ -7,7 +7,7 @@ The first model is an Isolation Forest. It is deliberately used as supportive an
 ## Reproducibility
 
 - Python 3.12 in the container.
-- Exact dependency versions in `requirements.txt`.
+- Pinned direct dependency versions in `requirements.txt`; runtime SBOMs record the resolved transitive versions.
 - Fixed random seed: `707`.
 - Model is trained from deterministic synthetic baseline rows at service startup.
 - No pickle/joblib artefacts are loaded.
@@ -55,3 +55,16 @@ fixtures. Failure concentration and combined simulated OT context do. These are 
 synthetic sensitivity measurements, not production recall or compromise probabilities.
 See the [Phase Seven architecture](../../docs/architecture/phase-7-behavioural-analytics.md#behavioural-catalogue-maturity)
 for interpretation and remaining limitations.
+
+## Deployment and tracing
+
+The runtime uses a digest-pinned Alpine Python 3.12 base and UID 10001. Build tools
+compile the pinned scikit-learn wheel in a separate stage and do not enter the runtime.
+The model seed/version remain unchanged; the regression gate verifies synthetic scores
+and catalogue behaviour after framework/runtime upgrades.
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` optionally enables bounded OpenTelemetry export. Incoming
+W3C trace context joins gateway HTTP calls. Spans contain method, registered route and
+status, without request bodies, header values, query strings or exception messages.
+Health remains available when the exporter is unavailable. See
+[deployment operations](../../docs/architecture/phase-9-deployment.md).

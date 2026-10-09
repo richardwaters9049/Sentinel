@@ -1,0 +1,352 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+  name: sentinel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: console
+  namespace: sentinel
+spec:
+  ports:
+  - port: 3000
+    targetPort: 3000
+  selector:
+    app: console
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: sentinel
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: gateway
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml
+  namespace: sentinel
+spec:
+  ports:
+  - port: 8090
+    targetPort: 8090
+  selector:
+    app: ml
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console
+  namespace: sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: console
+  template:
+    metadata:
+      labels:
+        app: console
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: SENTINEL_GATEWAY_URL
+          value: http://gateway:8080
+        - name: SENTINEL_CONSOLE_ORIGIN
+          valueFrom:
+            secretKeyRef:
+              key: console-origin
+              name: sentinel-runtime
+        image: sentinel-console:phase9
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /sign-in
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        name: console
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /sign-in
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /app/.next/cache
+          name: cache
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - emptyDir:
+          sizeLimit: 64Mi
+        name: tmp
+      - emptyDir:
+          sizeLimit: 64Mi
+        name: cache
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: SENTINEL_ENV
+          value: production
+        - name: SENTINEL_AUTH_MODE
+          value: required
+        - name: SENTINEL_HTTP_ADDR
+          value: 0.0.0.0:8080
+        - name: SENTINEL_AUTH_CREDENTIALS_FILE
+          value: /run/sentinel/credentials.json
+        - name: DATABASE_URL_FILE
+          value: /run/sentinel/database-url
+        - name: SENTINEL_ML_URL
+          value: http://ml:8090
+        - name: SENTINEL_BEHAVIOUR_ENABLED
+          value: "true"
+        - name: NATS_URL
+          valueFrom:
+            secretKeyRef:
+              key: nats-url
+              name: sentinel-runtime
+        - name: SENTINEL_CONSOLE_ORIGIN
+          valueFrom:
+            secretKeyRef:
+              key: console-origin
+              name: sentinel-runtime
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: otlp-endpoint
+              name: sentinel-runtime
+        image: sentinel-gateway:phase9
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        name: gateway
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /run/sentinel
+          name: private
+          readOnly: true
+      initContainers:
+      - command:
+        - sh
+        - -ec
+        - cp /input/credentials.json /input/database-url /output/; chmod 400 /output/*
+        image: busybox:1.37.0
+        name: private-credentials
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /input
+          name: input
+          readOnly: true
+        - mountPath: /output
+          name: private
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - emptyDir:
+          sizeLimit: 64Mi
+        name: tmp
+      - name: input
+        secret:
+          defaultMode: 288
+          secretName: sentinel-runtime
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi
+        name: private
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml
+  namespace: sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml
+  template:
+    metadata:
+      labels:
+        app: ml
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: sentinel-runtime
+              key: otlp-endpoint
+        image: sentinel-ml:phase9
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        name: ml
+        ports:
+        - containerPort: 8090
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - emptyDir:
+          sizeLimit: 64Mi
+        name: tmp
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sentinel-boundary
+  namespace: sentinel
+spec:
+  egress:
+  - to:
+    - podSelector: {}
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+  - ports:
+    - port: 5432
+      protocol: TCP
+    - port: 4222
+      protocol: TCP
+    - port: 4318
+      protocol: TCP
+  ingress:
+  - from:
+    - podSelector: {}
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

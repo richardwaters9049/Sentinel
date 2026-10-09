@@ -27,6 +27,15 @@ type NATS struct {
 	js   nats.JetStreamContext
 }
 
+// ConsumerStats exposes backlog without reading event payloads.
+func (n *NATS) ConsumerStats(ctx context.Context) (uint64, int, error) {
+	info, err := n.js.ConsumerInfo(TelemetryStream, TelemetryStoreDurable, nats.Context(ctx))
+	if err != nil {
+		return 0, 0, err
+	}
+	return info.NumPending, info.NumAckPending, nil
+}
+
 func Connect(ctx context.Context, url string, timeout time.Duration) (*NATS, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("connect to NATS: %w", err)

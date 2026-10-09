@@ -59,3 +59,26 @@ test("proxy rejects path traversal, invalid encodings and oversized login bodies
   const response=await POST(new NextRequest("http://localhost/api/sentinel/api/v1/auth/login",{method:"POST",body:"x".repeat(2049)}),{params:Promise.resolve({path:["api","v1","auth","login"]})});assert.equal(response.status,413);
  }finally{globalThis.fetch=original;}
 });
+
+test("proxy preserves collector signatures, trace context and retry guidance", async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_input, options) => {
+      const headers = new Headers(options?.headers);
+      assert.equal(headers.get("x-sentinel-signature"), "synthetic-signature");
+      assert.equal(headers.get("x-sentinel-timestamp"), "123");
+      assert.equal(headers.get("x-sentinel-nonce"), "synthetic-nonce");
+      assert.equal(headers.get("traceparent"), "synthetic-parent");
+      return Response.json({ error: { code: "rate_limited" } }, { status: 429,
+        headers: { "Retry-After": "1", "X-Sentinel-Request-ID": "synthetic-id" } });
+    };
+    const { POST } = await import("./route");
+    const response = await POST(new NextRequest("http://localhost/api/sentinel/api/v1/telemetry", {
+      method: "POST", body: "{}", headers: { "X-Sentinel-Signature": "synthetic-signature",
+        "X-Sentinel-Timestamp": "123", "X-Sentinel-Nonce": "synthetic-nonce", traceparent: "synthetic-parent" },
+    }), { params: Promise.resolve({ path: ["api", "v1", "telemetry"] }) });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "1");
+    assert.equal(response.headers.get("x-sentinel-request-id"), "synthetic-id");
+  } finally { globalThis.fetch = original; }
+});

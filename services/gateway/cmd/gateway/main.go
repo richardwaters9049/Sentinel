@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/behaviour"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/config"
@@ -16,9 +17,12 @@ import (
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/httpserver"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/messaging"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/observability"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
+
+var version = "development"
 
 func main() {
 	cfg, err := config.Load()
@@ -31,6 +35,14 @@ func main() {
 	}))
 
 	logger.Info("API authentication configured", "mode", cfg.AuthMode)
+	ops := observability.New(logger, cfg.OTLPEndpoint, version)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := ops.Close(ctx); err != nil {
+			logger.Warn("trace export drain timed out")
+		}
+	}()
 	if cfg.Access == nil {
 		logger.Warn("development API authentication bypass enabled; loopback clients only")
 	}
@@ -111,8 +123,12 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).WithAccess(cfg.Access, logger).WithSessions(db, cfg.ConsoleOrigin).Handler(),
+		Handler:           httpserver.NewWithBehaviourCatalogue(readinessChecker, telemetryService, db, db, behaviourClient).WithAccess(cfg.Access, logger).WithSessions(db, cfg.ConsoleOrigin).WithHardening(db, ops).WithQueueStats(natsClient.ConsumerStats).Handler(),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16384,
 	}
 
 	serverErrors := make(chan error, 1)

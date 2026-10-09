@@ -21,7 +21,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const target = new URL(`${gatewayBase}/${safePath}`);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.append(key, value));
   const headers = new Headers({ Accept: "application/json" });
-  for (const header of ["content-type", "authorization", "x-sentinel-actor", "x-request-id", "origin", "x-sentinel-csrf"]) {
+  for (const header of ["content-type", "authorization", "x-sentinel-actor", "x-request-id", "origin", "x-sentinel-csrf", "traceparent", "x-sentinel-timestamp", "x-sentinel-nonce", "x-sentinel-signature"]) {
     const value = request.headers.get(header);
     if (value) headers.set(header, value);
   }
@@ -49,6 +49,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const response = await fetch(target, { method: request.method, headers, body: body as BodyInit | undefined,
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
     const outputHeaders = new Headers({ "Content-Type": response.headers.get("content-type") ?? "application/json", "Cache-Control": "no-store" });
+    for (const name of ["traceparent", "x-sentinel-request-id", "retry-after"]) {
+      const value = response.headers.get(name);
+      if (value) outputHeaders.set(name, value);
+    }
     const cookie = response.headers.get("set-cookie");
     if (cookie) outputHeaders.set("Set-Cookie", cookie);
     const challenge = response.headers.get("www-authenticate");

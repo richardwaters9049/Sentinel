@@ -57,6 +57,9 @@ Architecture decisions:
 - [Phase 7 — Behavioural analytics](architecture/phase-7-behavioural-analytics.md).
 - [Phase 7 — Completion evidence and limitations](architecture/phase-7-completion.md).
 - [Phase 8 — Platform hardening](architecture/phase-8-platform-hardening.md).
+- [Phase 9 — Deployment and operations](architecture/phase-9-deployment.md).
+- [Phase Eight/Nine completion evidence](architecture/phase-8-9-completion.md).
+- [Collector signatures and access ledger](adr/0007-collector-signatures-and-access-ledger.md).
 - [Behavioural analytics service](../services/ml/README.md) — model features and reproducibility.
 
 Phase documents preserve historical milestones and verification. Current authentication

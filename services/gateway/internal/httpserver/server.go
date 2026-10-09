@@ -17,6 +17,7 @@ import (
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/enrichment"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/hunting"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/investigation"
+	"github.com/richardwaters9049/Sentinel/services/gateway/internal/observability"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/readiness"
 	"github.com/richardwaters9049/Sentinel/services/gateway/internal/telemetry"
 )
@@ -85,6 +86,10 @@ type AnalystStore interface {
 }
 
 type Server struct {
+	queueStats    func(context.Context) (uint64, int, error)
+	security      access.SecurityStore
+	operations    *observability.Operations
+	limits        *limiter
 	sessions      access.SessionStore
 	consoleOrigin string
 	sessionCookie string
@@ -129,10 +134,13 @@ func NewWithBehaviourCatalogue(
 }
 
 func (s *Server) Handler() http.Handler {
-	return securityHeaders(limitRequestBody(s.authorise(s.mux)))
+	return securityHeaders(limitRequestBody(s.operational(s.authorise(s.mux))))
 }
 
 func (s *Server) routes() {
+	s.register("GET /api/v1/security/audit", s.handleAccessAudit, access.Administrator)
+	s.register("POST /api/v1/security/audit/retention", s.handleAuditRetention, access.Administrator)
+	s.register("GET /api/v1/platform/metrics", s.handlePlatformMetrics, access.Administrator)
 	s.register("POST /api/v1/auth/login", s.handleLogin)
 	s.register("POST /api/v1/auth/logout", s.handleLogout, access.Analyst, access.Administrator)
 	s.register("GET /api/v1/session", s.handleSession, access.Analyst, access.Administrator, access.Collector)
@@ -237,6 +245,20 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// This namespace is gateway provenance, never a producer-supplied assertion.
+	for key := range request.Labels {
+		if strings.HasPrefix(key, "sentinel.collector.") {
+			delete(request.Labels, key)
+		}
+	}
+	if proof, ok := r.Context().Value(collectorKey{}).(collectorProof); ok {
+		if request.Labels == nil {
+			request.Labels = make(map[string]string)
+		}
+		request.Labels["sentinel.collector.subject"] = requestActor(r)
+		request.Labels["sentinel.collector.key_sha256"] = proof.KeyHash
+		request.Labels["sentinel.collector.body_sha256"] = proof.BodyHash
+	}
 	event, err := s.ingestor.Ingest(r.Context(), request)
 	if err != nil {
 		if errors.Is(err, telemetry.ErrInvalidEvent) {

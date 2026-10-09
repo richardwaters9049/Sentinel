@@ -80,6 +80,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, 403, "forbidden", "collector credentials cannot sign in to the console")
 		return
 	}
+	if !s.persistAccess(r, "POST /api/v1/auth/login", principal, "allowed", 0) {
+		writeAPIError(w, 503, "audit_unavailable", "security audit storage is unavailable")
+		return
+	}
 	id, err := access.RandomSessionID()
 	if err != nil {
 		writeAPIError(w, 503, "session_unavailable", "session could not be created")
